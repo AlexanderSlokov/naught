@@ -23,8 +23,8 @@ Naught never writes to the systems it observes. See README, *What Naught will ne
 
 These are load-bearing. Breaking one requires an ADR that explains why.
 
-| Constraint                         | Meaning in practice                                                                                                                                                                                    |
-|------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Constraint                         | Meaning in practice                                                                                                                                                                                     |
+|------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Read-only outward**              | Every credential Naught holds for an external system is read-only. Write access is a bug, not a feature.                                                                                                |
 | **Complex inside, simple outside** | Naught may be internally elaborate — many collectors, a large graph, heavy processing. What must stay simple is the operator's surface: one thing to deploy, one place to look, one decision per event. |
 | **Easy to throw away**             | Truth is a directory of immutable files. Backup is a file copy. Restore is a file copy. No hand-tended state, no clustering, no quorum.                                                                 |
@@ -39,16 +39,16 @@ These are load-bearing. Breaking one requires an ADR that explains why.
 
 ## 3. Stack
 
-| Layer | Choice | Why |
-|---|---|---|
-| Backend | **NestJS** (TypeScript) | Module per collector; dependency injection makes collectors swappable; built-in scheduler and queue integration; GraphQL is first-class, which matters if we ever federate with GUAC. |
-| Frontend | **Next.js** + **Blueprint** (`@blueprintjs/*`) | Blueprint is Palantir's React toolkit, Apache-2.0, built for data-dense analytical interfaces. It is the correct aesthetic and functional fit for this application. |
-| Storage of record | **Parquet files on disk**, Hive-partitioned | Raw runs are immutable, append-only, columnar, and compress extremely well against repetitive data. No database owns the truth, so no database can corrupt it. |
-| Query engine | **DuckDB** | Reads the Parquet lake directly (`SELECT * FROM 'runs/**/*.parquet'`), supports `WITH RECURSIVE` for transitive dependency closure, and is embedded — no server, no port, no operator surface. |
-| Derived cache | **One `naught.duckdb` file** | Materialized entities, edges, and drift, indexed for the UI. Pure cache. `rm naught.duckdb && naught rebuild` is always safe and is a tested path. |
-| Queue | **Redis** + BullMQ | Collection is bursty and retryable. Collectors call rate-limited external APIs; retry with backoff, blocked-job visibility, and survival across restarts are worth one container. |
-| Validation | **zod** | TypeScript types vanish at runtime. Every external payload is validated at the boundary before it is trusted. |
-| Shared types | A `packages/shared` workspace | One set of types across collectors, API, and UI. This is the main reason the whole stack is TypeScript. |
+| Layer             | Choice                                         | Why                                                                                                                                                                                            |
+|-------------------|------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Backend           | **NestJS** (TypeScript)                        | Module per collector; dependency injection makes collectors swappable; built-in scheduler and queue integration; GraphQL is first-class, which matters if we ever federate with GUAC.          |
+| Frontend          | **Next.js** + **Blueprint** (`@blueprintjs/*`) | Blueprint is Palantir's React toolkit, Apache-2.0, built for data-dense analytical interfaces. It is the correct aesthetic and functional fit for this application.                            |
+| Storage of record | **Parquet files on disk**, Hive-partitioned    | Raw runs are immutable, append-only, columnar, and compress extremely well against repetitive data. No database owns the truth, so no database can corrupt it.                                 |
+| Query engine      | **DuckDB**                                     | Reads the Parquet lake directly (`SELECT * FROM 'runs/**/*.parquet'`), supports `WITH RECURSIVE` for transitive dependency closure, and is embedded — no server, no port, no operator surface. |
+| Derived cache     | **One `naught.duckdb` file**                   | Materialized entities, edges, and drift, indexed for the UI. Pure cache. `rm naught.duckdb && naught rebuild` is always safe and is a tested path.                                             |
+| Queue             | **Redis** + BullMQ                             | Collection is bursty and retryable. Collectors call rate-limited external APIs; retry with backoff, blocked-job visibility, and survival across restarts are worth one container.              |
+| Validation        | **zod**                                        | TypeScript types vanish at runtime. Every external payload is validated at the boundary before it is trusted.                                                                                  |
+| Shared types      | A `packages/shared` workspac3e                  | One set of types across collectors, API, and UI. This is the main reason the whole stack is TypeScript.                                                                                        |
 
 **Why not Postgres.** Postgres was the first candidate and remains the fallback if the graph outgrows recursive CTEs. It lost on shape, not on capability: Naught's central question is *"what is true now versus at time T"*, which is a columnar scan over immutable history — DuckDB's home ground and Postgres's worst case. DuckDB also removes a server, a port, a connection pool, and a backup procedure from the operator's surface, which is constraint #2 paying out. **If graph traversal becomes the bottleneck rather than history scanning, revisit this with an ADR.**
 
@@ -118,13 +118,13 @@ Observations stream to the sink rather than accumulating in a return value: a mo
 
 ### Axes
 
-| Axis | Status | Declared | Observed | Lightweight collector | Advanced collector (optional) |
-|---|---|---|---|---|---|
-| **Dependency rot** | **v1** | what you built against | what upstream now says about it | Read lock files from git, query OSV batch API | Query a running GUAC instance over GraphQL |
-| **Base image tag drift** | **v1** | base image digest at build time | digest that same tag resolves to now | Read Dockerfile/build metadata, resolve tag against registry | — |
-| Placement drift | later | the scheduling blueprint | where workloads actually run | Compare a scheduling blueprint to actual placement | — |
-| Configuration drift | later | declared node state | node state now | Read declared state from a repo, compare to observed | Read from a sibling tool if present |
-| Credential staleness | later | intended lifetime | time since last rotation | Age since last rotation, from metadata only | — |
+| Axis                     | Status | Declared                        | Observed                             | Lightweight collector                                        | Advanced collector (optional)              |
+|--------------------------|--------|---------------------------------|--------------------------------------|--------------------------------------------------------------|--------------------------------------------|
+| **Dependency rot**       | **v1** | what you built against          | what upstream now says about it      | Read lock files from git, query OSV batch API                | Query a running GUAC instance over GraphQL |
+| **Base image tag drift** | **v1** | base image digest at build time | digest that same tag resolves to now | Read Dockerfile/build metadata, resolve tag against registry | —                                          |
+| Placement drift          | later  | the scheduling blueprint        | where workloads actually run         | Compare a scheduling blueprint to actual placement           | —                                          |
+| Configuration drift      | later  | declared node state             | node state now                       | Read declared state from a repo, compare to observed         | Read from a sibling tool if present        |
+| Credential staleness     | later  | intended lifetime               | time since last rotation             | Age since last rotation, from metadata only                  | —                                          |
 
 The three `later` axes exist in the `Axis` enum and in the data model from day one, but ship without collectors. They are not speculative — they are the reason the model is multi-axis — but nothing in v1 depends on them.
 
