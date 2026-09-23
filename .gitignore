@@ -1,32 +1,64 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
+# Dependencies
+node_modules/
+.pnpm-store/
+.yarn/cache/
+.yarn/install-state.gz
 
-# Test binary, built with `go test -c`
-*.test
+# Lock files are NOT ignored, deliberately.
+# Naught reads lock files to find dependency rot, and its own repository is
+# the acceptance test. A missing lock file here is a blind spot we inflicted
+# on ourselves.
 
-# Code coverage profiles and other test artifacts
-*.out
-coverage.*
-*.coverprofile
-profile.cov
+# Build output
+dist/
+build/
+out/
+.next/
+.turbo/
+*.tsbuildinfo
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# Test and coverage
+coverage/
+.nyc_output/
+*.lcov
 
-# Go workspace file
-go.work
-go.work.sum
+# Naught's own state — truth and cache alike.
+# The Parquet lake is the source of truth, but git is not where it lives:
+# it is append-only operational data, not source. "Easy to throw away"
+# stops being true the moment history is committed here.
+data/
+runs/
+*.parquet
+*.duckdb
+*.duckdb.wal
+*.duckdb.tmp/
 
-# env file
+# Secrets and local configuration.
+# Every credential Naught holds is read-only, which lowers the blast radius
+# of a leak. It does not make one acceptable.
 .env
+.env.*
+!.env.example
+*.pem
+*.key
 
-# Editor/IDE
-# .idea/
-# .vscode/
+# Local overrides
+docker-compose.override.yml
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
