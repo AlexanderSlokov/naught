@@ -20,6 +20,26 @@ exists, and a dead control the moment a second one lands.
 **Done when** clicking an axis with data loads it, and an axis without data
 explains that nothing has looked rather than doing nothing.
 
+**W5a — `@blueprintjs/table` does not render under React 19**
+*Files:* `apps/web/components/SubjectTable.tsx`
+*Depends on:* an upstream fix
+Tried and reverted on 2026-09-25. `Table2` mounts its chrome — quadrants,
+scroll containers, a body sized correctly at `numRows × rowHeight` — and then
+renders zero cells and zero column headers, with no console error. Reproduced
+in isolation on a bare three-row table outside the application's layout, with
+and without `reactStrictMode`, on both 6.2.4 and 6.2.6 (the newest release past
+the release-age window). `componentDidMount` only builds its locator when all
+three element refs are non-null, and without a locator `viewportRect` stays
+undefined and the body is never rendered; something in React 19.3 or Turbopack
+leaves one of those refs null.
+
+The hand-rolled `<table>` stays. It is denser than Table2's default, it reads
+correctly, and it works. What it gives up is virtualization and copy-out of a
+selected cell — neither of which matters at 313 rows, both of which will matter
+on the image axis.
+**Done when** a release of `@blueprintjs/table` renders cells under this
+toolchain, or the reason it cannot is understood well enough to work around.
+
 **W6 — Linkable selection**
 *Files:* `apps/web/components/Explorer.tsx`
 *Depends on:* W5
