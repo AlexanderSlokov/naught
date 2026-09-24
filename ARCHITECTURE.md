@@ -67,11 +67,13 @@ These are load-bearing. Breaking one requires an ADR that explains why.
 ```
 naught/
 ├── apps/
-│   ├── api/             # NestJS: collectors, scheduler, ingest, compactor, GraphQL/REST, notifier
+│   ├── api/             # NestJS: collectors, lake, scheduler, compactor, API, notifier
 │   └── web/             # Next.js + Blueprint
 ├── packages/
 │   └── shared/          # zod schemas + inferred types, shared by both apps
+├── fixtures/            # lockfiles known to be rotten, so the detector stays tested
 ├── docs/adr/            # architecture decision records
+├── Makefile             # every command a person actually runs
 ├── docker-compose.yml
 └── ARCHITECTURE.md
 ```
@@ -81,11 +83,18 @@ Three containers: `api`, `web`, `redis`. One volume, holding the lake and the ca
 ```
 /var/lib/naught/
 ├── runs/                        # truth. immutable, append-only
-│   ├── axis=deps/date=2026-09-24/osv--0300.parquet
-│   ├── axis=image/date=2026-09-24/registry--0300.parquet
+│   ├── axis=deps/date=2026-09-24/
+│   │   ├── deps-osv--030412-811d6f.obs.parquet      # what the run saw
+│   │   └── deps-osv--030412-811d6f.blind.parquet    # what it could not see
+│   ├── axis=image/date=2026-09-24/
+│   │   └── image-registry--030507-4a91c2.obs.parquet
 │   └── axis=deps/month=2026-08/part-0000.parquet    # compacted
 └── naught.duckdb                # cache. droppable
 ```
+
+A run file is named `{collector}--{HHMMSS}-{nonce}.{obs|blind}.parquet`. The seconds and the nonce are not decoration: two runs of the same collector inside one clock tick would otherwise write the same name, and `COPY TO` overwrites silently — append-only in this document, last-write-wins on disk. The writer refuses to overwrite an existing run file rather than trusting the name to be unique.
+
+Observations and blind spots are separate files because they share column names. A glob that matches both unions a *could not see it* row into a list of things that were seen, which is the lie by omission this project exists to refuse.
 
 There is no `migrations/` directory. Parquet files carry their own schema; the derived cache is rebuilt, never migrated.
 
