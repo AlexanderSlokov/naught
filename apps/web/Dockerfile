@@ -22,9 +22,13 @@ RUN pnpm --filter @naught/shared build && pnpm --filter @naught/web build
 
 FROM base AS runtime
 ENV NODE_ENV=production
-COPY --from=build /app/node_modules node_modules
-COPY --from=build /app/packages/shared packages/shared
-COPY --from=build /app/apps/web apps/web
+# The standalone bundle carries its own minimal node_modules, traced from
+# what the server actually imports. Static assets are not traced and are
+# copied alongside it.
+COPY --from=build /app/apps/web/.next/standalone ./
+COPY --from=build /app/apps/web/.next/static apps/web/.next/static
 USER node
 EXPOSE 3000
-CMD ["node_modules/.bin/next", "start", "apps/web", "-p", "3000"]
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+CMD ["node", "apps/web/server.js"]
