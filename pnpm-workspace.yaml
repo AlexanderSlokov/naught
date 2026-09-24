@@ -26,3 +26,26 @@ allowBuilds:
   # pure JS without it. A speedup is not worth a compile step running as
   # whoever ran the install. Refused.
   msgpackr-extract: false
+
+# --- toolchain --------------------------------------------------------------
+#
+# These four lived in `.npmrc` until 2026-09-24, where pnpm 11 does not read
+# them: `pnpm config list` never showed them, and `save-exact=true` in an
+# .npmrc demonstrably still recorded `^2.5.1`. pnpm 11 moved its settings into
+# this file and renamed them to camelCase. Silently inert configuration is
+# worse than no configuration, because it is believed.
+
+# Refuse to run on an unpinned toolchain.
+engineStrict: true
+
+# Every version in package.json is exact. A range is a decision deferred to
+# install time, and install time is not where Naught wants its surprises.
+savePrefix: ''
+
+# A peer dependency that does not line up is a bug reported now, not a crash
+# reported by a user later.
+strictPeerDependencies: true
+
+# node_modules that has drifted from the lockfile is the exact condition
+# Naught exists to detect. It is not tolerated in Naught's own repository.
+verifyDepsBeforeRun: warn
