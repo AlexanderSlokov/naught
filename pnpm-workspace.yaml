@@ -1,0 +1,28 @@
+packages:
+  - apps/*
+  - packages/*
+
+# --- supply chain -----------------------------------------------------------
+
+# A package published seven days ago has had seven days for someone to notice
+# it was compromised. The DuckDB npm compromise of September 2025 was caught
+# and pulled in about four hours; this window turns that class of incident
+# into something that never reaches the lockfile at all.
+#
+# It also delays legitimate security patches by a week. When one must land
+# now, `--ignore-minimum-release-age` is the escape hatch, and reaching for
+# it is a decision someone makes on purpose.
+minimumReleaseAge: 10080
+
+# pnpm does not run a dependency's install scripts unless it is listed here.
+# Under npm, install grants arbitrary code execution to every package in the
+# tree, transitively. Each `true` below is a deliberate grant.
+dangerouslyAllowAllBuilds: false
+allowBuilds:
+  # Verifies and links its platform binary at install time. Pulled in by tsx
+  # and vitest, both dev-only. Granted.
+  esbuild: true
+  # An optional native accelerator pulled in by bullmq. msgpackr falls back to
+  # pure JS without it. A speedup is not worth a compile step running as
+  # whoever ran the install. Refused.
+  msgpackr-extract: false
