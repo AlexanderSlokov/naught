@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DuckDBConnection, DuckDBInstance } from '@duckdb/node-api';
 import { mkdir, readdir } from 'node:fs/promises';
@@ -13,6 +13,15 @@ import { join } from 'node:path';
  * costing anything. The `naught.duckdb` cache is a separate, droppable file
  * and is not this connection.
  */
+/**
+ * Injection is declared, not inferred.
+ *
+ * Nest can read constructor parameter types from `emitDecoratorMetadata`,
+ * but only tsc emits it — esbuild, which is what tsx and vitest run on, does
+ * not. Wiring that works compiled and breaks under the dev runner is a trap
+ * with no error message worth reading. `@Inject` states the token outright
+ * and costs nothing.
+ */
 @Injectable()
 export class LakeService implements OnModuleDestroy {
   readonly dataDir: string;
@@ -20,7 +29,7 @@ export class LakeService implements OnModuleDestroy {
   private instance?: DuckDBInstance;
   private connection?: DuckDBConnection;
 
-  constructor(config: ConfigService) {
+  constructor(@Inject(ConfigService) config: ConfigService) {
     this.dataDir = config.get<string>('NAUGHT_DATA_DIR') ?? './data';
     this.runsDir = join(this.dataDir, 'runs');
   }

@@ -2,7 +2,8 @@
 // The SQL below runs against an in-memory DuckDB pointed at Parquet files.
 // There is no datasource to configure, by design.
 import { createWriteStream, type WriteStream } from 'node:fs';
-import { mkdir, rm } from 'node:fs/promises';
+import { access, mkdir, rm } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import type { BlindSpot, Observation } from '@naught/shared';
 import type { LakeService } from './lake.service.js';
@@ -23,6 +24,13 @@ import {
  * so there is no second implementation of the format to disagree with.
  */
 export class ParquetRunSink {
+  /**
+   * Distinguishes two runs of the same collector in the same second. Without
+   * it, a second run inside the same clock tick writes the same filename and
+   * DuckDB's COPY overwrites the first one without a word — append-only in
+   * the design document and last-write-wins on disk.
+   */
+  private readonly nonce = randomBytes(3).toString('hex');
   private observations?: WriteStream;
   private blindSpots?: WriteStream;
   private observedCount = 0;
@@ -36,11 +44,11 @@ export class ParquetRunSink {
   ) {}
 
   private get stem(): string {
-    const hhmm = this.startedAt
+    const hhmmss = this.startedAt
       .toISOString()
-      .slice(11, 16)
-      .replace(':', '');
-    return `${this.collectorId.replace(/\./g, '-')}--${hhmm}`;
+      .slice(11, 19)
+      .replace(/:/g, '');
+    return `${this.collectorId.replace(/\./g, '-')}--${hhmmss}-${this.nonce}`;
   }
 
   private async staging(kind: 'obs' | 'blind'): Promise<string> {
@@ -85,6 +93,13 @@ export class ParquetRunSink {
 
       const staged = join(dir, `.${this.stem}.${kind}.ndjson`);
       const target = join(dir, `${this.stem}.${kind}.parquet`);
+
+      // The lake is append-only, and that has to be enforced rather than
+      // assumed. DuckDB's COPY overwrites silently; a name collision here
+      // would destroy a run that has already been reported on.
+      if (await exists(target)) {
+        throw new Error(`refusing to overwrite an existing run file: ${target}`);
+      }
       await db.run(
         `COPY (SELECT * FROM read_json('${staged}', format = 'newline_delimited', columns = ${columnsClause(columns)})) ` +
           `TO '${target}' (FORMAT PARQUET, COMPRESSION ZSTD)`,
@@ -98,5 +113,14 @@ export class ParquetRunSink {
       observed: this.observedCount,
       blind: this.blindSpotCount,
     };
+  }
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
   }
 }

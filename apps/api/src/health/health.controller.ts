@@ -1,9 +1,9 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Inject } from '@nestjs/common';
 import { LakeService } from '../lake/lake.service.js';
 
 @Controller('health')
 export class HealthController {
-  constructor(private readonly lake: LakeService) {}
+  constructor(@Inject(LakeService) private readonly lake: LakeService) {}
 
   /**
    * Reports what Naught can see of itself. Deliberately includes the lake

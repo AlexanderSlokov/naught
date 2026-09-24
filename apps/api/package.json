@@ -10,7 +10,8 @@
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "rebuild-cache": "tsx src/lake/rebuild.ts"
+    "rebuild-cache": "tsx src/lake/rebuild.ts",
+    "poc": "tsx src/poc.ts"
   },
   "dependencies": {
     "@naught/shared": "workspace:*",

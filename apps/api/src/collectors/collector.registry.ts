@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Collector } from './collector.js';
 import { DepsOsvCollector } from './deps-osv.collector.js';
 
@@ -7,7 +7,7 @@ export class CollectorRegistry {
   private readonly log = new Logger(CollectorRegistry.name);
   private readonly collectors = new Map<string, Collector>();
 
-  constructor(depsOsv: DepsOsvCollector) {
+  constructor(@Inject(DepsOsvCollector) depsOsv: DepsOsvCollector) {
     for (const c of [depsOsv]) this.collectors.set(c.id, c);
     this.log.log(`${this.collectors.size} collector(s) registered`);
   }
