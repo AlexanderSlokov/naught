@@ -45,7 +45,7 @@ const summary = await collector.collect(
   { targets: [lockfile], since: null },
   sink,
 );
-const sealed = await sink.seal();
+const sealed = await sink.seal(summary);
 
 console.log(`observed : ${summary.observed}`);
 console.log(`expected : ${summary.expected ?? 'unknown'}`);

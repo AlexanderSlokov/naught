@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { LakeModule } from './lake/lake.module.js';
 import { CollectorsModule } from './collectors/collectors.module.js';
+import { FindingsModule } from './findings/findings.module.js';
 import { HealthController } from './health/health.controller.js';
 
 @Module({
@@ -11,6 +12,7 @@ import { HealthController } from './health/health.controller.js';
     ScheduleModule.forRoot(),
     LakeModule,
     CollectorsModule,
+    FindingsModule,
   ],
   controllers: [HealthController],
 })

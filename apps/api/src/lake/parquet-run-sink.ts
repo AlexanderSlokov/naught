@@ -3,10 +3,11 @@
 // There is no datasource to configure, by design.
 import { createWriteStream, type WriteStream } from 'node:fs';
 import { access, mkdir, rm } from 'node:fs/promises';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import type { BlindSpot, Observation } from '@naught/shared';
+import type { Axis, BlindSpot, Observation, RunSummary } from '@naught/shared';
 import type { LakeService } from './lake.service.js';
+import { writeManifest } from './run-manifest.js';
 import {
   BLIND_SPOT_COLUMNS,
   OBSERVATION_COLUMNS,
@@ -38,7 +39,7 @@ export class ParquetRunSink {
 
   constructor(
     private readonly lake: LakeService,
-    private readonly axis: string,
+    private readonly axis: Axis,
     private readonly collectorId: string,
     private readonly startedAt: Date,
   ) {}
@@ -70,14 +71,20 @@ export class ParquetRunSink {
   }
 
   /**
-   * Converts staging to Parquet and returns the files written.
+   * Converts staging to Parquet, records the run's manifest, and returns the
+   * files written.
    *
    * The Parquet file appears only once it is complete. A reader globbing the
    * lake mid-run sees the previous state, never a half-written one — which is
    * what lets "immutable, append-only" mean something operationally and not
    * just on paper.
+   *
+   * The summary is the collector's own account of its coverage and is taken as
+   * given. Nothing downstream can recover it from the rows; see `run-manifest.ts`.
    */
-  async seal(): Promise<{ files: string[]; observed: number; blind: number }> {
+  async seal(
+    summary: RunSummary,
+  ): Promise<{ files: string[]; observed: number; blind: number }> {
     const dir = this.lake.partitionDir(this.axis, this.startedAt);
     const db = await this.lake.query();
     const files: string[] = [];
@@ -107,6 +114,20 @@ export class ParquetRunSink {
       await rm(staged, { force: true });
       files.push(target);
     }
+
+    // Written last, and only over files that already exist: a manifest naming
+    // artifacts that were never sealed would describe a run that did not
+    // happen.
+    await writeManifest(dir, this.stem, {
+      runId: randomUUID(),
+      collectorId: this.collectorId,
+      axis: this.axis,
+      startedAt: this.startedAt.toISOString(),
+      finishedAt: new Date().toISOString(),
+      status: 'complete',
+      summary,
+      artifacts: files,
+    });
 
     return {
       files,

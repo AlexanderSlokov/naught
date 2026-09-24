@@ -25,6 +25,7 @@ belongs
 - `docs/references/` — information-oriented. Facts to look up: schemas, measured
   numbers, the paper, session records. Descriptive and accurate, never instructive.
 - `docs/explanation/` — understanding-oriented. Why the design is the way it is.
+- UI work follows the captured Palantir/Foundry material in `docs/references/palantir-*.md`.
 
 ## Constraints
 

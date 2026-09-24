@@ -72,7 +72,10 @@ naught/
 ├── packages/
 │   └── shared/          # zod schemas + inferred types, shared by both apps
 ├── fixtures/            # lockfiles known to be rotten, so the detector stays tested
-├── docs/adr/            # architecture decision records
+├── docs/                # Diátaxis: adr/, references/, explanation/
+├── ROADMAP.md           # capabilities, by phase and target version
+├── BACKLOG.md           # tasks, with the files they touch and their done-when
+├── CHANGELOG.md         # what landed, written for an operator
 ├── Makefile             # every command a person actually runs
 ├── docker-compose.yml
 └── ARCHITECTURE.md
@@ -85,7 +88,8 @@ Three containers: `api`, `web`, `redis`. One volume, holding the lake and the ca
 ├── runs/                        # truth. immutable, append-only
 │   ├── axis=deps/date=2026-09-24/
 │   │   ├── deps-osv--030412-811d6f.obs.parquet      # what the run saw
-│   │   └── deps-osv--030412-811d6f.blind.parquet    # what it could not see
+│   │   ├── deps-osv--030412-811d6f.blind.parquet    # what it could not see
+│   │   └── deps-osv--030412-811d6f.run.json         # what it set out to see
 │   ├── axis=image/date=2026-09-24/
 │   │   └── image-registry--030507-4a91c2.obs.parquet
 │   └── axis=deps/month=2026-08/part-0000.parquet    # compacted
@@ -93,6 +97,15 @@ Three containers: `api`, `web`, `redis`. One volume, holding the lake and the ca
 ```
 
 A run file is named `{collector}--{HHMMSS}-{nonce}.{obs|blind}.parquet`. The seconds and the nonce are not decoration: two runs of the same collector inside one clock tick would otherwise write the same name, and `COPY TO` overwrites silently — append-only in this document, last-write-wins on disk. The writer refuses to overwrite an existing run file rather than trusting the name to be unique.
+
+Beside them sits the run's manifest, `{stem}.run.json`, holding the collector's
+own `RunSummary`. Rows record what was seen; they cannot record what the
+collector expected to see, and so they cannot answer *at what coverage*. A lake
+of 313 clean rows looks identical whether the collector read 313 packages or
+read 313 of 400 and gave up. Reconstructing the denominator from the rows would
+put the count at the mercy of the same collector that failed to count, which is
+what `RunSummary.expected` is nullable to prevent. The run states its coverage
+once, and every reader reads it rather than deriving it.
 
 Observations and blind spots are separate files because they share column names. A glob that matches both unions a *could not see it* row into a list of things that were seen, which is the lie by omission this project exists to refuse.
 

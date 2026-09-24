@@ -66,6 +66,24 @@ export class LakeService implements OnModuleDestroy {
     return join(this.runsDir, `axis=${axis}`, '**', `*.${kind}.parquet`);
   }
 
+  /**
+   * Whether the lake holds any file of this kind for this axis.
+   *
+   * DuckDB raises `IO Error: No files found that match the pattern` on a glob
+   * that matches nothing, so every reader must ask this before querying. A lake
+   * with nothing in it is a legitimate state — no collector has run yet — and
+   * not a query failure.
+   */
+  async hasFiles(axis: string, kind: 'obs' | 'blind'): Promise<boolean> {
+    const axisDir = join(this.runsDir, `axis=${axis}`);
+    try {
+      const entries = await readdir(axisDir, { recursive: true });
+      return entries.some((name) => name.endsWith(`.${kind}.parquet`));
+    } catch {
+      return false;
+    }
+  }
+
   async countRunFiles(): Promise<number> {
     try {
       const entries = await readdir(this.runsDir, {

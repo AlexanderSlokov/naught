@@ -1,8 +1,226 @@
 @import '@blueprintjs/core/lib/css/blueprint.css';
 @import '@blueprintjs/icons/lib/css/blueprint-icons.css';
 
+/*
+ * Every value here resolves to a Blueprint variable. Blueprint is Palantir's
+ * design system, so borrowing the Foundry shape means composing its tokens,
+ * not transcribing hex codes that happen to look similar. See
+ * docs/references/palantir-design-language.md.
+ */
+:root {
+  --naught-chrome: var(--bp-palette-dark-gray-1);
+  --naught-surface: var(--bp-palette-dark-gray-2);
+  --naught-raised: var(--bp-palette-dark-gray-3);
+  --naught-line: var(--bp-palette-dark-gray-5);
+  --naught-text: var(--bp-palette-light-gray-5);
+
+  /*
+   * Text colours, chosen by measurement rather than by eye.
+   *
+   * Blueprint's `--bp-intent-*-rest` values are tuned as fills on a light
+   * surface. Used as text on the dark theme they land between 3.0 and 4.2
+   * against `--naught-surface`, under the 4.5 that small text needs — the
+   * drift column is 12px, and a number nobody can read is a number that is
+   * not being reported. Step 4 of each palette family clears it:
+   *   gray-4 6.83 · orange-4 6.36 · red-4 4.60 · light-gray-5 13.47
+   * Blueprint reaches the same conclusion for its own muted text in dark
+   * mode, which is gray-4 and not gray-2.
+   */
+  --naught-muted: var(--bp-palette-gray-4);
+  --naught-warning: var(--bp-palette-orange-4);
+  --naught-danger: var(--bp-palette-red-4);
+
+  /* The 4/8/12/16 scale Foundry applications are built on. */
+  --naught-gap-1: 4px;
+  --naught-gap-2: 8px;
+  --naught-gap-3: 12px;
+  --naught-gap-4: 16px;
+  --naught-radius: 3px;
+
+  --naught-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+}
+
 html,
 body {
   margin: 0;
   padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--naught-chrome);
+}
+
+/*
+ * Blueprint 6's `.bp6-dark` redefines its surface and intent variables but
+ * declares no `color`, while its own `body { color: #1c2127 }` stands — dark
+ * text on a dark page, which renders as very nearly nothing. The theme has to
+ * be told what the text colour is.
+ */
+.bp6-dark body,
+body {
+  color: var(--naught-text);
+}
+
+/*
+ * Page → Section → Widget, laid out as Workshop composes a module: a header
+ * that never moves, a rail down the left for the one choice that changes
+ * everything else, the object table where the eye lands, its detail to the
+ * right, and what moved along the bottom.
+ */
+.naught-shell {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr) 320px;
+  grid-template-rows: 40px minmax(0, 1fr) 176px;
+  grid-template-areas:
+    'header header header'
+    'rail   table  panel'
+    'rail   strip  strip';
+  height: 100dvh;
+}
+
+.naught-header {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  gap: var(--naught-gap-3);
+  padding: 0 var(--naught-gap-4);
+  background: var(--naught-chrome);
+  border-bottom: 1px solid var(--naught-line);
+}
+
+.naught-rail {
+  grid-area: rail;
+  background: var(--naught-chrome);
+  border-right: 1px solid var(--naught-line);
+  padding: var(--naught-gap-3) 0;
+  overflow-y: auto;
+}
+
+.naught-table {
+  grid-area: table;
+  background: var(--naught-surface);
+  overflow: auto;
+}
+
+.naught-panel {
+  grid-area: panel;
+  background: var(--naught-chrome);
+  border-left: 1px solid var(--naught-line);
+  overflow-y: auto;
+  padding: var(--naught-gap-4);
+}
+
+.naught-strip {
+  grid-area: strip;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  border-top: 1px solid var(--naught-line);
+  background: var(--naught-chrome);
+  overflow: hidden;
+}
+
+.naught-strip > section {
+  padding: var(--naught-gap-3) var(--naught-gap-4);
+  overflow-y: auto;
+}
+
+.naught-strip > section + section {
+  border-left: 1px solid var(--naught-line);
+}
+
+/* Section labels: 12px, uppercase, tracked. The quietest possible structure. */
+.naught-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--naught-muted);
+  margin: 0 0 var(--naught-gap-2);
+  display: flex;
+  align-items: baseline;
+  gap: var(--naught-gap-2);
+}
+
+.naught-mono {
+  font-family: var(--naught-mono);
+  font-size: 12px;
+}
+
+/* The object table. Compact, because 313 rows is a normal answer here. */
+.naught-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.naught-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--naught-raised);
+  border-bottom: 1px solid var(--naught-line);
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--naught-muted);
+  padding: var(--naught-gap-2) var(--naught-gap-3);
+  white-space: nowrap;
+}
+
+.naught-table tbody td {
+  padding: var(--naught-gap-1) var(--naught-gap-3);
+  border-bottom: 1px solid var(--bp-palette-dark-gray-3);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.naught-table tbody tr {
+  cursor: pointer;
+}
+
+.naught-table tbody tr:hover {
+  background: var(--naught-raised);
+}
+
+.naught-table tbody tr[aria-selected='true'] {
+  background: var(--bp-intent-primary-rest);
+  color: var(--bp-intent-primary-foreground);
+}
+
+/* Properties in the detail panel: label left, value right, nothing else. */
+.naught-props {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: var(--naught-gap-1) var(--naught-gap-3);
+  font-size: 12px;
+}
+
+.naught-props dt {
+  color: var(--naught-muted);
+}
+
+.naught-props dd {
+  margin: 0;
+  font-family: var(--naught-mono);
+  overflow-wrap: anywhere;
+}
+
+/* Drift as intent. A selected row inverts, and takes its drift with it. */
+.naught-drift--none {
+  color: var(--naught-muted);
+}
+
+.naught-drift--warning,
+.naught-drift--unknown {
+  color: var(--naught-warning);
+}
+
+.naught-drift--danger {
+  color: var(--naught-danger);
+}
+
+.naught-table tbody tr[aria-selected='true'] .naught-drift {
+  color: inherit;
 }
