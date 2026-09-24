@@ -17,6 +17,12 @@ out/
 .turbo/
 *.tsbuildinfo
 
+# Written by `next dev` without being asked. Generated guidance for coding
+# agents is not something this repository asserts; if Naught ever wants to
+# say something to an agent, it will be a file someone wrote on purpose.
+AGENTS.md
+CLAUDE.md
+
 # Test and coverage
 coverage/
 .nyc_output/
