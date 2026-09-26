@@ -4,6 +4,8 @@
 
 Read `README.md` first for what Naught is and why it exists. This document covers *how* it is built and the reasoning behind each choice, so that a future contributor (human or agent) does not re-litigate settled decisions or violate a constraint without knowing it was deliberate.
 
+Terms of art — coverage, drift, subject, blind spot — are defined in §12. Where a word used elsewhere in this repository disagrees with §12, §12 is the one that is right.
+
 ---
 
 ## 1. What Naught does, mechanically
@@ -116,7 +118,7 @@ run that cannot say what it read is not repeated on a guess.
 
 Observations and blind spots are separate files because they share column names. A glob that matches both unions a *could not see it* row into a list of things that were seen, which is the lie by omission this project exists to refuse.
 
-There is no `migrations/` directory. Parquet files carry their own schema; the derived cache is rebuilt, never migrated.
+There is no `migrations/` directory. Parquet files carry their own schema; the derived cache is rebuilt, never migrated. The lake nonetheless has a schema *version*, stated by each run in its manifest: what may change inside one version, and what requires an upgrade stop, is settled in §10.
 
 ---
 
@@ -154,6 +156,8 @@ drift:      the tag moved under you
 
 Two numbers fall out: whether the tag has moved, and how old the running digest is. Both need only registry read access.
 
+Where the *declared* digest is read from, and what this axis renders when nothing recorded it, is settled in §10. It renders neither a guess nor an empty panel.
+
 ---
 
 ## 6. Data model, in outline
@@ -190,13 +194,15 @@ Being finer-grained than GUAC is also what keeps federation coherent: a GUAC nod
 
 Raw runs are kept **forever**. They are not deleted, rolled up, or summarized away.
 
-This is affordable because of the format, not in spite of it: consecutive runs of the same scope are nearly identical, and Parquet's dictionary and run-length encoding compress that to very little. A monthly **compactor** merges the day's files into month partitions, which keeps the file count flat and query planning fast. Old month partitions may be moved to cold storage; they are never dropped.
+This is affordable because of the format, not in spite of it: consecutive runs of the same scope are nearly identical, and Parquet's dictionary and run-length encoding compress that to very little. A monthly **compactor** merges the day's files into month partitions, which keeps the file count flat and query planning fast. Compaction is row-preserving and verified before any original is dropped; the invariant is stated in §10. Old month partitions may be moved to cold storage; they are never dropped.
 
 The alternative — a retention window — puts an expiry date on the one question Naught exists to answer. *"What changed since I last trusted this?"* must not have a floor of "since March".
 
 ### Coverage
 
 Every drift number carries the coverage it was computed at, all the way to the interface. There is no hard threshold below which Naught refuses to answer; there is no answer that arrives without its coverage attached.
+
+Coverage means one thing only — how much of what a run set out to read it actually read — and §12 defines it, with a worked example. It is not a health score and it is not a confidence score; those readings are the reason the definition is written down.
 
 > Nothing found. Scanned 82% of what was declared. *18% unknown — 4 vendored binaries, 1 unresolvable registry.*
 
@@ -225,6 +231,8 @@ Credentials: read-only tokens for every external system. The API holds them; not
 
 There is no schema migration step. On startup the API ensures `naught.duckdb` matches the current code's schema version; if it does not, it rebuilds the cache from the lake. A fresh deployment and a stale cache take the same code path.
 
+The lake is checked on the same startup and handled differently. A stale cache is rebuilt without asking anyone; a lake written at a schema version this code cannot read stops the API, which names the upgrade stop that can read it (§10). The cache is disposable and the lake is not, so only one of the two may be dealt with silently.
+
 Backup is copying `runs/`. `naught.duckdb` is never backed up — restoring it would be slower than rebuilding it.
 
 ---
@@ -249,18 +257,66 @@ And when a week of running produces no notifications on a quiet week, and exactl
 
 ## 10. Open questions
 
-Unresolved. Do not guess — write an ADR when deciding.
+Of the six questions this section opened with, three are answered below, two are deferred on purpose, and one is still open.
 
-- **Accreted state.** How does Naught detect things that exist but were never declared — the VM someone configured by hand, the realm added through a UI? Every axis so far compares a declaration to reality; this is the class of decay with no declaration to compare against.
-- **The coverage denominator.** Coverage is now a first-class output, which means `expected` must be defined per collector. For a lock file it is the entry count. For a container image, what? An honest `null` is allowed, but a collector that always returns `null` renders the guarantee decorative.
-- **Where `declared` comes from for base images.** Build-time digest requires build metadata, an SBOM, or image config inspection. Which of those is the lightweight path, and what does the collector do when none are present?
-- **Parquet schema evolution.** Files written years apart must remain queryable in one `SELECT`. Additive columns are fine; renames and type changes are not. What is the rule, and where is the schema version recorded?
-- **Compaction and immutability.** Compaction rewrites files. Raw runs are supposed to be immutable. Reconciling these needs a stated invariant — probably that compaction preserves rows exactly and is verified by row-count and checksum before the originals are dropped.
-- **Graph traversal at scale.** Recursive CTEs in DuckDB are the bet. At what depth or breadth do they stop being adequate, and what is the signal to revisit Postgres?
+Each answer is the decision of record. It is owed an ADR under `docs/adr/`, and the reasoning is written here first so that none of it is lost while `docs/` is reorganized into Diátaxis. Reversing one of these means writing the ADR that says why — not editing the paragraph.
+
+### Answered
+
+#### Where `declared` comes from for base images
+
+`declared` is the digest the tag resolved to when the image was built. Naught reads it from the first of three sources that is present:
+
+1. **The image's own config** — the `org.opencontainers.image.base.digest` and `…base.name` annotations, which BuildKit writes at build time. The cheapest path by a wide margin: it needs the registry read access this axis already requires, and nothing else deployed.
+2. **Build metadata** — a provenance record or CI artifact naming the digest that was resolved when the image was built. The most authoritative source, and available only where the builder was configured to record it.
+3. **An SBOM** — when it lists the base image as a component and carries its digest.
+
+When none of the three is present, the axis does not guess, does not resolve the tag twice and call the agreement "no drift", and does not render an empty panel. It renders **unavailable**, naming what it looked for and what would make it work:
+
+> Base image drift unavailable for `acme/api:2026.9`. No build-time digest recorded. This axis needs one of: base-image annotations in the image config, a provenance record from the build, or an SBOM naming the base image.
+
+*Unavailable* is a third state beside zero and unknown (§12) and is reported as itself. "The tag has not moved" and "nobody wrote down where the tag pointed" are exactly the two facts this project exists to keep apart.
+
+#### Parquet schema evolution
+
+Raw runs are kept forever (§6), so files written years apart must answer one `SELECT`, and the lake outlives the code that wrote it. The rule follows GitLab's upgrade path (`docs.gitlab.com/update/upgrade_paths/`): most upgrades are unremarkable, a few are **required stops**, and the operator is told which rather than being allowed to skip one.
+
+- **Within a schema version, additions only.** A new column is appended, and files written before it read as `NULL` — readers union by name, which `apps/api/src/lake/schema.ts` declares rather than infers. No stop, no rewrite, any version to any version.
+- **A rename or a type change is a new schema version**, and the release carrying it is an upgrade stop. That release ships a rewriter: it reads the lake at the old version, writes it at the new one, verifies the result by the compaction invariant below, and only then lets the API serve. An operator may not jump across a stop, in the same way GitLab requires the latest patch of the current minor and every stop in between before a major.
+- **The version is recorded by the run**, in its manifest, beside the coverage figure and for the same reason: the writer states what it wrote and readers read it, rather than sniffing columns and inferring a generation. The column set in `schema.ts` as of this document is schema version **1**; a manifest that names no version is read as 1, and so is a run that has no manifest at all.
+- **The API refuses rather than improvises.** On startup it compares the lake's schema versions against what the code can read. Older and rewritable: it names the upgrade stop to install. Newer than the code: it refuses to serve, because reading tomorrow's columns under today's assumptions is how a lake starts lying quietly.
+
+This is deliberately the unglamorous option. The alternative — a reader clever enough to reconcile any two generations of the schema on the fly — puts the integrity of the one irreplaceable artifact into the hands of the most complicated code in the repository. Making an operator install `0.7` before `0.8` costs them one command. Mis-typing a column in a file nobody will read for two years costs them the history.
+
+#### Compaction and immutability
+
+Compaction rewrites files; `runs/` is immutable. The invariant that reconciles the two is Grafana Mimir's, whose block storage solved this problem for Prometheus data — and Naught, one retained run at a time, is coming to resemble Prometheus.
+
+Mimir compacts in two directions. **Vertical** compaction merges blocks that cover the same time range from different replicas and deduplicates their samples; Naught has no analog and needs none, because no two runs are replicas of each other. **Horizontal** compaction merges adjacent time ranges into larger blocks to shrink the index; that is precisely Naught's day-into-month merge, and it is the only half that is borrowed.
+
+The lifecycle is the part that carries the invariant:
+
+1. The compactor **writes a new file**. No existing file is opened for writing. *Immutable* is a claim about files on disk, and compaction does not break it — it adds one.
+2. The compacted file's manifest **records its sources**, so any row can be traced back to the run that observed it. Mimir keeps the same lineage in each block's `meta.json`.
+3. The sources are **marked** for deletion, not deleted. A reader that has already planned a query against them finishes against them.
+4. The hard delete follows **after a grace period** — Mimir's `-compactor.deletion-delay`, which exists so that readers discover the compacted block before its inputs disappear. Naught's grace period is its own value with the same purpose.
+
+Two conditions gate step 3: the compacted file must hold exactly the rows of its sources, verified by per-source row count and by checksum; and the sources must still be readable when that check runs. A source that fails verification is left in place and marked so the compactor does not retry it forever. A lake that stops compacting is merely slow. A lake that drops a row it cannot prove it copied is wrong, and it is wrong about the only thing it cannot rebuild.
+
+Stated once: **compaction changes how many files sit under an axis, and never the multiset of rows in them.** Anything that cannot say that of itself is not compaction, and does not get to delete an original.
+
+### Still open
+
+- **The coverage denominator.** Coverage now has one definition and one computation (§12), which narrows this question to its hard part: what `expected` *is*, collector by collector. For a lock file it is the entry count, known before the first OSV request is sent. For a container image there is no equally obvious unit — layers, declared base images, packages resolved out of the filesystem are three different denominators that yield three different percentages of the same run. An honest `null` remains permitted; a collector that always returns `null` makes the guarantee decorative. The image collector must therefore name its denominator, or state in this document why it has none.
+
+### Deferred on purpose
+
+- **Accreted state.** Leaning out of scope, and heading for a cold backlog rather than an answer. Undeclared *infrastructure* is found far more cheaply by the IaC that was supposed to create it: a plan that reports a resource it does not manage is the same finding, reached without Naught. Naught observes software — what a system is assembled from, and how far those parts have drifted from what was declared. Growing an inventory axis to catch the hand-made VM widens the tool past the question it exists to answer, and §11 already refuses the neighbouring job of standing infrastructure up. What would reopen this: an axis where the *software* accretes undeclared, such as a package present in a running image and in no lock file. That case has a declaration to compare against, which is what makes it Naught's.
+- **Graph traversal at scale.** Recursive CTEs in DuckDB are the bet, and the POC has not yet proved the bet needs hedging. Naming a depth or a breadth now would be designing against an imagined load, and §3 already records what to do instead — revisit Postgres with an ADR when traversal, rather than history scanning, is the bottleneck. The signal is a measured one: a traversal the interface visibly waits on, against a real lake. Until then this sits where §5 puts the three unimplemented axes, on YAGNI, on purpose.
 
 ### Settled, do not reopen without an ADR
 
-Unit of the graph (package version, purl) · retention (indefinite, compacted) · storage engine (Parquet + DuckDB) · blind spot handling (coverage on every verdict, no refusal threshold) · first axes (dependency rot, base image tag drift) · always-on service.
+Unit of the graph (package version, purl) · retention (indefinite, compacted) · storage engine (Parquet + DuckDB) · blind spot handling (coverage on every verdict, no refusal threshold) · first axes (dependency rot, base image tag drift) · always-on service · `declared` for base images (three sources in order, then *unavailable*) · schema evolution (additive within a version, upgrade stops across one) · compaction (row-preserving, verified, mark before delete).
 
 ---
 
@@ -271,6 +327,127 @@ Unit of the graph (package version, purl) · retention (indefinite, compacted) �
 - Not a provisioning or wiring layer. Standing up infrastructure and connecting services to each other is a separate problem and not Naught's.
 - Not an Internal Developer Platform. Naught serves the person who operates the systems, not the person who ships applications onto them.
 - Not a replacement for GUAC. GUAC goes deeper on one axis. Naught spans several, works one level finer, keeps history, and comes to you.
+
+---
+
+## 12. Glossary
+
+Naught's vocabulary is small and each word carries weight. A term means here what this section says it means; where another document, a code comment, or a panel in the interface uses one loosely, that place is the one to fix.
+
+### Axis
+
+One kind of decay, and the attribute measured for it: `deps`, `image`, `placement`, `config`, `credentials`. Every axis asks the same question in a different vocabulary — *what was declared, what is observed, how far apart are they* — which is why one data model serves all five (§6).
+
+### Collector
+
+A replaceable adapter that reads one external system and writes rows: `deps.osv`, `image.registry`. An axis may have a **lightweight** collector, which requires nothing else to be deployed, and an **advanced** one, which is richer because a sibling tool is present (§5). A collector holds no state between runs and is never given a credential that can write.
+
+### Subject
+
+The thing an axis measures, identified by Package URL: `pkg:npm/left-pad@1.3.0`. One observation row is one subject at one moment. A subject is a package *at a version*, because "is this compromised" and "has this been abandoned" are properties of a version, not of a name (§6).
+
+### Container
+
+Where a subject was found: a repository at a commit, an image digest, a host. Containers hold subjects and are not subjects themselves. For the deps axis, the container is the lock file the collector was pointed at.
+
+### Declared, observed, drift
+
+- **Declared** — what a source of truth says should be there: the version a lock file pinned, the digest a tag resolved to when an image was built.
+- **Observed** — what reality says now: what OSV reports about that version today, what the tag resolves to today.
+- **Drift** — the distance between them, as a number. Comparable within an axis and meaningless across axes: on `deps` it counts advisories, on `image` it reports a digest that moved and how old the running one is. A `null` drift is a subject the collector saw but could not place on the scale — which is not zero.
+
+### Run
+
+One execution of one collector against one scope. The run is the unit of everything: it writes its own Parquet files, states its own coverage, and is never edited afterwards. Runs are not merged into a current state. The state *is* the newest run, and the run before it is what makes a delta possible.
+
+### Scope
+
+What a run was pointed at: `targets`, plus an optional `since`. Recorded in the run manifest so that the interface's one action — *look again* — can repeat a run without an operator naming a target, and therefore without a path arriving over HTTP (ADR 0003).
+
+### Run manifest
+
+`{stem}.run.json`, written beside the Parquet files of the run it describes. It holds what the rows cannot: the collector's own `RunSummary`, the `Scope` the run was pointed at, the artifacts it produced, and — once the field exists — the schema version it was written at (§10). A manifest that names no version reads as version 1. A run with no manifest is not invalid; it is a run whose coverage is permanently unknown.
+
+### Coverage
+
+**How much of what a run set out to read, it actually read.** Nothing else.
+
+```
+coverage = observed / expected
+```
+
+- `observed` — subjects the run wrote an observation for.
+- `expected` — subjects the run knew it was supposed to read, stated by the collector itself the moment it knows (`RunSink.expected(n)`), never counted back out of the rows.
+- `coverage` — the quotient, and `null` when `expected` is unknown.
+
+The figure is computed once, by the run, and recorded in its manifest. Every reader reads it from there; nothing downstream recomputes it, because a denominator derived from the rows would be at the mercy of the same collector that failed to read them (§4).
+
+A worked example. A lock file holds 400 entries. Thirteen of its keys are not `name@version`, and one batch of 74 packages dies on an OSV rate limit:
+
+```
+expected  400      # counted from the lock file, before a single question was asked
+observed  313      # rows the run managed to write
+coverage  0.78
+blind      87      # 13 unparseable + 74 rate-limited, each a row carrying its reason
+```
+
+If none of those 313 subjects carries an advisory, Naught's verdict is *nothing found, at 78% coverage*, and the missing 22% is itemized. It is not *nothing found*.
+
+What coverage is **not**:
+
+- **Not a health score.** 100% coverage with forty advisories is a fully-read, rotten project. 78% coverage with none is three-quarters of a project, read.
+- **Not a confidence score**, not a share of anything fixed, and not a measure of Naught's own quality.
+- **Not a threshold.** There is no level below which Naught refuses to answer (§6). There is no answer that arrives without coverage attached.
+
+`coverage: null` means *this run cannot say*. The interface renders it as `coverage unknown` and never as complete, and keeping those apart is why `expected` is nullable everywhere it appears.
+
+### Blind spot
+
+Something a run knew it could not see, written as a row carrying a reason from a closed vocabulary: `unparseable`, `rate-limited`, `unreachable-upstream`, `access-denied`, `unsupported-ecosystem`, `opaque-layer`, `vendored-binary`, `other`. Blind spots live in their own `.blind.parquet` file so that no glob can union *could not see it* into a list of things that were seen (§4).
+
+An empty blind-spot list does not mean everything was read. It means the run knew of nothing it had missed, and the reader is handed to the coverage figure to learn whether those are the same thing.
+
+### Zero, unknown, unavailable
+
+Three states Naught is never allowed to conflate:
+
+| State | Means | Rendered as |
+|---|---|---|
+| **Zero** | It was read, and there is nothing wrong with it | a number, beside its coverage |
+| **Unknown** | It could not be read, and Naught says which part and why | a blind spot, and coverage below 100% |
+| **Unavailable** | The axis cannot be computed at all, because an input it requires is absent | the axis states what is missing and what it needs (§10) |
+
+### Finding
+
+A subject whose drift is worth an operator's attention on its axis — for `deps`, a subject carrying at least one advisory. Findings are counted per run (`openFindings`) and travel with the delta, so that "nothing changed" can never be read as "nothing is wrong".
+
+### Delta
+
+What moved between the two most recent runs of an axis: subjects whose drift changed, appeared, or went away. What did not move is deliberately absent (§7). The delta, not the snapshot, is the product (§11).
+
+### Lake
+
+`runs/`. Immutable, append-only Parquet plus one manifest per run, Hive-partitioned `axis=…/date=…`. The only thing in the system that cannot be recomputed, and therefore the only thing that is backed up (§8).
+
+### Derived cache
+
+`naught.duckdb`. Everything the lake implies, materialized and indexed for the interface. Droppable at any moment by design, and dropping it is a tested path (§2).
+
+### Compaction
+
+Merging a day's run files into a month partition to keep the file count flat and query planning fast. It writes a new file, verifies it holds exactly the rows of its sources, and only then marks the sources for deletion. It never edits a file in place (§10).
+
+### Schema version
+
+Which generation of the Parquet column set a run was written against, stated by the run in its manifest. Adding a column does not change it. A rename or a type change does, and crossing that boundary requires an upgrade stop (§4, §10).
+
+### Upgrade stop
+
+A release an operator must pass through in order, rather than skipping. Because the lake is retained forever, it outlives the code that wrote it; a release that changes the column set therefore ships the rewriter that migrates the lake, and refuses to be jumped over. Borrowed, name and all, from GitLab's upgrade path (§10).
+
+### Accreted state
+
+Something that exists but was never declared: the VM configured by hand, the realm added through a UI. Named here because every Naught axis compares a declaration against reality, and this is the class of decay with no declaration to compare against. Currently deferred, and leaning out of scope (§10).
 
 ---
 
