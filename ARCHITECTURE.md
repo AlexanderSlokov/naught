@@ -290,3 +290,76 @@ Unit of the graph (package version, purl) · retention (indefinite, compacted) �
 - Not a provisioning or wiring layer. Standing up infrastructure and connecting services to each other is a separate problem and not Naught's.
 - Not an Internal Developer Platform. Naught serves the person who operates the systems, not the person who ships applications onto them.
 - Not a replacement for GUAC. GUAC goes deeper on one axis. Naught spans several, works one level finer, keeps history, and comes to you.
+
+---
+
+```text
+
+                                 BROWSER
+        │                           │                           ▲
+        │ (1) GET /                 │ (2) POST /runs            │ (3) ws /runs/stream
+        │     trang                 │     bấm "Collect"         │     tiến độ + kết quả
+        ▼                           │                           │
+┌───────────────────┐               │        CORS: NAUGHT_WEB_ORIGIN (một origin)
+│  web   :3000      │               │                           │
+│  Next 16 · RSC    │               │                           │
+│                   │               └───────────┬───────────────┘
+│  page.tsx  ───────┼──── lib/api.ts            │   NEXT_PUBLIC_NAUGHT_API_URL
+│  (force-dynamic)  │     NAUGHT_API_URL        │   (nướng vào bundle lúc BUILD)
+└─────────┬─────────┘     http://api:3001       │
+          │                (chỉ server thấy)    │
+          ▼                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  api   :3001        NestJS · một process, hai đường đi                      │
+│                                                                             │
+│  ĐƯỜNG ĐỌC (GET, không trạng thái)     ĐƯỜNG CHẠY (POST, có trạng thái)     │
+│  ─────────────────────────────────     ──────────────────────────────────   │
+│  FindingsController                    RunsController ── RunBroadcaster ────┼──► ws
+│        │                                     │             (ws gateway,     │
+│        ▼                                     ▼              snapshot 30s)   │
+│  FindingsService                       CollectionStarter         ▲          │
+│        │                                │    │    │              │          │
+│        │                     latestScope│    │    │refuse        │          │
+│        │                    (đọc .run.json)   │   │ nếu đang chạy │         │
+│        ▼                                 ▼    ▼                  │          │
+│  LakeService.query()              BullRunQueue ──► Redis ──┐      │         │
+│  DuckDB :memory:                  jobId = collectorId      │      │         │
+│        │                          (trùng id ⇒ bị từ chối)  │      │         │
+│        │                                                   ▼      │         │
+│        │                               CollectionProcessor (concurrency 1)  │
+│        │                                     │                    │         │
+│        │                          DepsOsvCollector.collect(scope, sink)     │
+│        │                                     │            └── OSV API (đọc) │
+│        │                          ProgressReportingSink ──────────┘         │
+│        │                            (đếm, throttle 250ms)                   │
+│        │                                     │                              │
+│        │                             ParquetRunSink                         │
+│        │                          seal() ─┬─ .obs.parquet                   │
+│        ▼                                  └─ .run.json  (summary + scope)   │
+│    glob Parquet ◄─────────────────────────┘  discard() nếu hỏng             │
+└──────────┬──────────────────────────────────────────────┬───────────────────┘
+           │                                              │
+           ▼                                              ▼
+┌──────────────────────────────┐              ┌────────────────────────────┐
+│  volume  /var/lib/naught     │              │  redis  (không publish)    │
+│  ── SỰ THẬT ──               │              │  ── TRẠNG THÁI ĐIỀU PHỐI ──│
+│  runs/axis=deps/date=…/      │              │  không persist             │
+│    *.obs.parquet   bất biến  │              │  mất = chạy lại là xong    │
+│    *.blind.parquet append    │              └────────────────────────────┘
+│    *.run.json      only      │
+│  ── CACHE, vứt được ──       │      Run đang chạy KHÔNG BAO GIỜ vào lake.
+│  naught.duckdb               │      Lake chỉ nhận đúng 1 manifest khi seal,
+└──────────────────────────────┘      và không nhận gì khi thất bại.
+
+Hai bất biến định hình toàn bộ thiết kế:
+
+┌─────────────┬───────────────────────────┬────────────────────────────────────────────┐
+│             │      Sự thật (lake)       │ Trạng thái nhất thời (Redis + broadcaster) │
+├─────────────┼───────────────────────────┼────────────────────────────────────────────┤
+│ Ghi khi     │ seal() thành công         │ ngay khi enqueue                           │
+├─────────────┼───────────────────────────┼────────────────────────────────────────────┤
+│ Mất thì sao │ không khôi phục được      │ chạy lại là xong                           │
+├─────────────┼───────────────────────────┼────────────────────────────────────────────┤
+│ Ai đọc      │ mọi GET, qua glob Parquet │ GET /runs/current, socket                  │
+└─────────────┴───────────────────────────┴────────────────────────────────────────────┘
+```
