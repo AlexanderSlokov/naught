@@ -58,9 +58,47 @@ of a subject, and blind spots of a kind `deps` never produces (opaque layers).
 | Capability | State |
 |---|---|
 | Observe base image tags and digests; detect a moved tag | Not started |
+| Say plainly when an axis cannot be computed at all | Not started |
+| Record the schema version every run is written at | Not started |
 | Run collection on a schedule rather than by hand | Not started |
 | Trigger a collection from the interface | Done |
 | Notify once, with coverage, when something crosses a threshold (§7) | Not started |
+
+### Say plainly when an axis cannot be computed at all
+
+The image axis needs a build-time digest, and an image is under no obligation to
+carry one. [ADR 0004](./docs/adr/0004-where-declared-comes-from-for-base-images.md)
+decides where that digest is read from — base-image annotations, a provenance
+record, an SBOM, in that order — and what happens when an image carries none of
+the three: the axis reports itself unavailable and names every source that would
+have worked.
+
+That state has nowhere to live today. `GET /axes` answers `hasData` as a boolean,
+which puts "nothing has looked yet" and "this cannot be computed here" in the
+same box. They are different sentences to an operator: one is answered by
+pressing Collect, the other by changing how images are built.
+
+**Done when** an axis pointed at images with no recorded build-time digest shows
+an unavailable panel naming the three sources, and an axis nothing has collected
+yet still reads as it does now — with the two states distinguishable in the API
+response, not only in the interface.
+
+### Record the schema version every run is written at
+
+Runs are kept forever, so the lake outlives the code that wrote it, and a file
+that cannot say which generation of the column set it belongs to has to be
+guessed at. [ADR 0005](./docs/adr/0005-parquet-schema-evolution-and-upgrade-stops.md)
+settles the rule: additions are free within a version, anything else is a new
+version reached through an upgrade stop, and the version is stated by the run in
+its manifest.
+
+This is listed here rather than later because every run sealed before the field
+exists is a run with no version on it. The cost of the delay is paid in files,
+not in code.
+
+**Done when** a sealed manifest carries its schema version, a manifest written
+before the field existed reads as version 1, and an API booted against a lake
+written at a version it does not know refuses to serve and names what it found.
 
 ---
 

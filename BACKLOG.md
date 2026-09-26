@@ -52,6 +52,55 @@ boundary.
 
 ## Phase 2 · A second axis, and the loop that closes itself
 
+**X4 — The image collector has no way to learn its declared digest**
+*Files:* `apps/api/src/collectors/image-registry.collector.ts` (new),
+`apps/api/src/collectors/collector.registry.ts`, ARCHITECTURE §5
+*Depends on:* nothing outstanding
+Decided in [ADR 0004](./docs/adr/0004-where-declared-comes-from-for-base-images.md):
+`declared` is read from base-image annotations in the image config, then a
+provenance record, then an SBOM, and an image carrying none of the three makes
+the axis unavailable rather than clean. None of that exists — the axis has no
+collector at all.
+The collector must also state what `expected` counts for an image, or record in
+ARCHITECTURE §10 why it has none. A collector that always reports `null` makes
+the coverage guarantee decorative, and §10 keeps that question open until the
+first image collector answers it.
+**Done when** a run against an image built with base-image annotations reports a
+declared digest, an observed digest, and whether the tag moved; and a run against
+an image carrying none of the three sources produces an unavailable axis naming
+all three rather than a drift of zero.
+
+**X5 — `GET /axes` cannot say "cannot be computed here"**
+*Files:* `packages/shared/src/findings.ts`,
+`apps/api/src/findings/findings.service.ts`,
+`apps/web/components/AxisRail.tsx`
+*Depends on:* X4 for the first axis that needs it
+`AxisAvailability.hasData` is a boolean, so "nothing has looked yet" and "this
+axis cannot be computed against these inputs" arrive at the interface as the
+same value. An operator fixes the first by pressing Collect and the second by
+changing how their images are built; telling them apart is the whole point of
+ADR 0004's unavailable state.
+**Done when** the API distinguishes the two states in its response and the rail
+renders each with its own sentence, including the one that names what is
+missing.
+
+**X6 — Runs do not record the schema version they were written at**
+*Files:* `packages/shared/src/run.ts`, `apps/api/src/lake/parquet-run-sink.ts`,
+`apps/api/src/lake/run-manifest.ts`, `apps/api/src/main.ts`, ARCHITECTURE §4, §8
+*Depends on:* nothing outstanding
+[ADR 0005](./docs/adr/0005-parquet-schema-evolution-and-upgrade-stops.md) makes
+the run responsible for stating its schema version, and nothing does. Every run
+sealed before the field exists is a run whose generation has to be assumed,
+which is the same shape of debt as X2 and gets worse with every collection.
+`schemaVersion` follows `scope`'s compatibility rule — nullable and defaulted, so
+older manifests keep parsing — and a manifest without it reads as version 1.
+The startup check is the other half: the API compares the lake against what the
+code can read, and refuses to serve a lake written ahead of it rather than
+reading unknown columns as `NULL`.
+**Done when** a sealed manifest carries `schemaVersion: 1`, a manifest written
+without the field parses and reads as 1, and an API booted against a lake at an
+unknown version exits naming the version it found and the one it can read.
+
 **X3 — A deployed Naught has no way to record its first scope**
 *Files:* `apps/api/src/collectors/`, `docker-compose.yml`, ARCHITECTURE §8
 *Depends on:* nothing outstanding

@@ -118,7 +118,7 @@ run that cannot say what it read is not repeated on a guess.
 
 Observations and blind spots are separate files because they share column names. A glob that matches both unions a *could not see it* row into a list of things that were seen, which is the lie by omission this project exists to refuse.
 
-There is no `migrations/` directory. Parquet files carry their own schema; the derived cache is rebuilt, never migrated. The lake nonetheless has a schema *version*, stated by each run in its manifest: what may change inside one version, and what requires an upgrade stop, is settled in §10.
+There is no `migrations/` directory. Parquet files carry their own schema; the derived cache is rebuilt, never migrated. The lake nonetheless has a schema *version*, stated by each run in its manifest. Columns may be added within a version and readers union by name; renaming a column or changing its type is a new version, and reaching it requires an upgrade stop (§10).
 
 ---
 
@@ -156,7 +156,7 @@ drift:      the tag moved under you
 
 Two numbers fall out: whether the tag has moved, and how old the running digest is. Both need only registry read access.
 
-Where the *declared* digest is read from, and what this axis renders when nothing recorded it, is settled in §10. It renders neither a guess nor an empty panel.
+The *declared* digest is read from whichever of three sources is present, in this order: the base-image annotations in the image's own config, a provenance record from the build, an SBOM naming the base image. When an image carries none of the three, the axis reports itself unavailable and names what is missing, rather than resolving the tag twice and calling the agreement *no drift*. §10 holds the reasoning.
 
 ---
 
@@ -200,13 +200,25 @@ The alternative — a retention window — puts an expiry date on the one questi
 
 ### Coverage
 
-Every drift number carries the coverage it was computed at, all the way to the interface. There is no hard threshold below which Naught refuses to answer; there is no answer that arrives without its coverage attached.
+A run reads the lock file and finds 400 dependencies to ask about. It gets an answer back for 375 of them — *no advisory*, or *n advisories* — and no answer at all for the other 25, because OSV rate-limited one batch and two lock file keys were not `name@version`. Coverage is 375 of 400: **0.94**.
 
-Coverage means one thing only — how much of what a run set out to read it actually read — and §12 defines it, with a worked example. It is not a health score and it is not a confidence score; those readings are the reason the definition is written down.
+```
+expected  400      # dependencies the run found to ask about
+observed  375      # dependencies it got an answer for
+coverage  0.94     # observed / expected
+```
+
+The 25 it could not answer for are written to the lake one by one, each carrying the reason it failed. Coverage states them as a proportion; the blind spot rows state them by name.
+
+The collector reports `expected` as soon as it has parsed the lock file, before the first request goes out, and the run computes coverage once when it seals. The figure is recorded in the run manifest, and every reader takes it from there — nothing counts a denominator back out of the rows, because that count would come from the same collector that failed to reach them (§4).
+
+A collector pointed at something whose parts it cannot count in advance reports `expected: null`. Coverage is then `null`, which the interface shows as `coverage unknown`, never as complete.
+
+Coverage travels with every number computed from the run, all the way to the interface:
 
 > Nothing found. Scanned 82% of what was declared. *18% unknown — 4 vendored binaries, 1 unresolvable registry.*
 
-is a sentence Naught may render. "Nothing found." alone is not.
+There is no coverage so low that Naught withholds what it found, and no answer that leaves without its coverage attached.
 
 ---
 
@@ -370,40 +382,17 @@ What a run was pointed at: `targets`, plus an optional `since`. Recorded in the 
 
 ### Coverage
 
-**How much of what a run set out to read, it actually read.** Nothing else.
+Naught found 400 dependencies in a lock file.
 
-```
-coverage = observed / expected
-```
+Naught can only get an advisory verdict for 375 of them, other 25 are unknown.
 
-- `observed` — subjects the run wrote an observation for.
-- `expected` — subjects the run knew it was supposed to read, stated by the collector itself the moment it knows (`RunSink.expected(n)`), never counted back out of the rows.
-- `coverage` — the quotient, and `null` when `expected` is unknown.
-
-The figure is computed once, by the run, and recorded in its manifest. Every reader reads it from there; nothing downstream recomputes it, because a denominator derived from the rows would be at the mercy of the same collector that failed to read them (§4).
-
-A worked example. A lock file holds 400 entries. Thirteen of its keys are not `name@version`, and one batch of 74 packages dies on an OSV rate limit:
-
-```
-expected  400      # counted from the lock file, before a single question was asked
-observed  313      # rows the run managed to write
-coverage  0.78
-blind      87      # 13 unparseable + 74 rate-limited, each a row carrying its reason
-```
-
-If none of those 313 subjects carries an advisory, Naught's verdict is *nothing found, at 78% coverage*, and the missing 22% is itemized. It is not *nothing found*.
-
-What coverage is **not**:
-
-- **Not a health score.** 100% coverage with forty advisories is a fully-read, rotten project. 78% coverage with none is three-quarters of a project, read.
-- **Not a confidence score**, not a share of anything fixed, and not a measure of Naught's own quality.
-- **Not a threshold.** There is no level below which Naught refuses to answer (§6). There is no answer that arrives without coverage attached.
-
-`coverage: null` means *this run cannot say*. The interface renders it as `coverage unknown` and never as complete, and keeping those apart is why `expected` is nullable everywhere it appears.
+So in that run, it has a `coverage of 0.94`.
 
 ### Blind spot
 
-Something a run knew it could not see, written as a row carrying a reason from a closed vocabulary: `unparseable`, `rate-limited`, `unreachable-upstream`, `access-denied`, `unsupported-ecosystem`, `opaque-layer`, `vendored-binary`, `other`. Blind spots live in their own `.blind.parquet` file so that no glob can union *could not see it* into a list of things that were seen (§4).
+Something Naught could not see in that run, written as a row: `unparseable`, `rate-limited`, `unreachable-upstream`, `access-denied`, `unsupported-ecosystem`, `opaque-layer`, `vendored-binary`, `other`. 
+
+Blind spots live in their own `.blind.parquet` file so that no glob can union *could not see it* into a list of things that were seen (§4).
 
 An empty blind-spot list does not mean everything was read. It means the run knew of nothing it had missed, and the reader is handed to the coverage figure to learn whether those are the same thing.
 
@@ -411,10 +400,10 @@ An empty blind-spot list does not mean everything was read. It means the run kne
 
 Three states Naught is never allowed to conflate:
 
-| State | Means | Rendered as |
-|---|---|---|
-| **Zero** | It was read, and there is nothing wrong with it | a number, beside its coverage |
-| **Unknown** | It could not be read, and Naught says which part and why | a blind spot, and coverage below 100% |
+| State           | Means                                                                      | Rendered as                                             |
+|-----------------|----------------------------------------------------------------------------|---------------------------------------------------------|
+| **Zero**        | It was read, and there is nothing wrong with it                            | a number, beside its coverage                           |
+| **Unknown**     | It could not be read, and Naught says which part and why                   | a blind spot, and coverage below 100%                   |
 | **Unavailable** | The axis cannot be computed at all, because an input it requires is absent | the axis states what is missing and what it needs (§10) |
 
 ### Finding

@@ -9,6 +9,41 @@ Entries are written for an operator: what changed, and why it mattered.
 ## [Unreleased]
 ### Added
 
+- **A definition of coverage that stands on its own.** Coverage appears on every
+  verdict Naught renders, and an operator reading *"nothing found, at 82%
+  coverage"* had nowhere to learn what the other 18% was measured against.
+  ARCHITECTURE §6 now works one run through in full — 400 dependencies found in
+  a lock file, an answer back for 375 of them, coverage 0.94 — and §12 is a
+  glossary of the rest of the vocabulary: axis, subject, drift, blind spot, the
+  difference between zero, unknown and unavailable, and what a run manifest
+  holds.
+- **Future releases may be marked as required upgrade stops.** Raw runs are kept
+  forever, so the lake outlives the code that wrote it, and a release that
+  changes the Parquet column set has to migrate what is already on disk. Such a
+  release is an upgrade stop: it carries the rewriter, it verifies the result,
+  and it may not be skipped over — the shape GitLab's upgrade path uses, for the
+  same reason. Columns added without a rename or a type change require nothing of
+  anyone. When a release is a stop, these notes will say so, because an operator
+  cannot discover that from the artifact they are installing.
+  [ADR 0005](./docs/adr/0005-parquet-schema-evolution-and-upgrade-stops.md)
+- **The image axis will say when it cannot answer, and what would fix it.** Base
+  image drift needs the digest a tag resolved to at build time, which an image is
+  under no obligation to carry. It is read from base-image annotations in the
+  image config, a provenance record from the build, or an SBOM — the first of the
+  three that is present. An image carrying none of them produces an *unavailable*
+  axis that names all three, rather than a drift of zero: resolving the tag twice
+  and finding the two answers agree would report every image in the estate as
+  current at the moment the axis knows least.
+  [ADR 0004](./docs/adr/0004-where-declared-comes-from-for-base-images.md)
+- **Compaction will prove itself before deleting anything.** Merging a day's runs
+  into a month partition writes a new file, records which runs it came from,
+  verifies the rows by per-source count and checksum, and only then marks the
+  originals — which are deleted after a grace period long enough for a query
+  already in flight to finish. No file is ever opened for writing, so backup
+  stays `cp -r` and a run's evidence stays the run's evidence. The lifecycle is
+  Grafana Mimir's, whose block storage holds the same shape of data.
+  [ADR 0006](./docs/adr/0006-compaction-preserves-rows.md)
+
 - **A collection can be started from the interface.** The header carries one
   control, `Collect`, which queues a run and reports it as it happens: queued,
   started, a progress bar once the collector knows its denominator, and then
