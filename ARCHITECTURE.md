@@ -9,13 +9,13 @@ Read `README.md` first for what Naught is and why it exists. This document cover
 ## 1. What Naught does, mechanically
 
 1. **Collect.** Scheduled jobs pull facts from many sources: git repositories (lock files), artifact registries, vulnerability feeds...
-2. **Normalize.** Everything lands in one shape, regardless of source.
-3. **Compare.** Each axis has a *declared* reference and an *observed* reality. The difference is drift.
-4. **Remember.** Every collection run is retained, so "what changed since I last trusted this?" is always answerable.
+2. **Normalize.** Consolidates sources of information to point out important aspects.
+3. **Compare.** Each axis ( a.k.a. the attribute) has a *declared* reference and an *observed* reality. The difference is drift.
+4. **Remember.** Every collection run is retained, so "what changed since I last know?" is always answerable.
 5. **Show.** A dense, readable interface for the operator.
-6. **Knock once.** When a drift number crosses an operator-set threshold, one notification. Otherwise, silence.
+6. **Knock once.** When a drift number crosses an operator-set threshold, only one notification. No more requests spamming.
 
-Naught never writes to the systems it observes. See README, *What Naught will never do*.
+Naught never take actions to mutate the systems it observes. See README, *What Naught will never do*.
 
 ---
 
@@ -23,15 +23,15 @@ Naught never writes to the systems it observes. See README, *What Naught will ne
 
 These are load-bearing. Breaking one requires an ADR that explains why.
 
-| Constraint                         | Meaning in practice                                                                                                                                                                                     |
-|------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Read-only outward**              | Every credential Naught holds for an external system is read-only. Write access is a bug, not a feature.                                                                                                |
-| **Complex inside, simple outside** | Naught may be internally elaborate — many collectors, a large graph, heavy processing. What must stay simple is the operator's surface: one thing to deploy, one place to look, one decision per event. |
-| **Easy to throw away**             | Truth is a directory of immutable files. Backup is a file copy. Restore is a file copy. No hand-tended state, no clustering, no quorum.                                                                 |
-| **Rebuildable from source data**   | Anything derived — the graph, aggregates, drift scores — can be dropped and recomputed from retained raw collection runs. There is exactly one command for this, and it is exercised in CI.             |
-| **No sibling is required**         | Naught works alone. If a sibling Naughtian tool (or GUAC) is present, a richer collector for that axis becomes available. Neither is mandatory.                                                         |
-| **Blind spots are declared**       | What a collector cannot see is recorded as `unknown`, never silently omitted. A map that lies by omission is worse than no map.                                                                         |
-| **No verdict without coverage**    | Every number Naught renders carries the coverage it was computed at. "Nothing found" alone is not a sentence Naught is allowed to say.                                                                  |
+| Constraint                         | Meaning in practice                                                                                                                                                                                                                                                      |
+|------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Read-only**                      | Every credential Naught holds for an external system is read-only.                                                                                                                                                                                                       |
+| **Complex inside, simple outside** | Naught may be internally elaborate many collectors, a large graph, heavy processing. But It must stay simple is the operator's surface: one thing (a bunble in Helmchart that can be thrown in Kind is counted to) to deploy, one place to look, one decision per event. |
+| **Easy to throw away**             | Truth is a directory of immutable files. Backup and Restore is just file copy. No hand-tended state, no clustering, no quorum.                                                                                                                                           |
+| **Rebuildable from source data**   | Anything derived — the graph, aggregates, drift scores — can be dropped and recomputed from retained raw collection runs. One command or CI trigger will do.                                                                                                             |
+| **No sibling is required**         | Naught works alone. If a sibling Naughtian tool (or GUAC) is present, a richer collector for that axis becomes available.                                                                                                                                                |
+| **Blind spots are declared**       | What a collector cannot see is recorded as `unknown`, never silently omitted. A map that lies by omission is worse than no map.                                                                                                                                          |
+| **No verdict without coverage**    | Every number Naught renders carries the coverage it was computed at. "Nothing found" alone is not a sentence Naught is allowed to say.                                                                                                                                   |
 
 **On being a service.** Naught is an always-on server, and the README's *Inert* principle is scoped accordingly: Naught never writes to the systems it observes, and its own state is append-only files it can rebuild from. It is not scoped to mean "no daemon". Watching global decay across many sources requires scheduled collection and retained history; a tool that only runs when you remember to run it is a tool that tells you about decay you already noticed.
 
@@ -39,25 +39,25 @@ These are load-bearing. Breaking one requires an ADR that explains why.
 
 ## 3. Stack
 
-| Layer             | Choice                                         | Why                                                                                                                                                                                            |
-|-------------------|------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Backend           | **NestJS** (TypeScript)                        | Module per collector; dependency injection makes collectors swappable; built-in scheduler and queue integration; GraphQL is first-class, which matters if we ever federate with GUAC.          |
-| Frontend          | **Next.js** + **Blueprint** (`@blueprintjs/*`) | Blueprint is Palantir's React toolkit, Apache-2.0, built for data-dense analytical interfaces. It is the correct aesthetic and functional fit for this application.                            |
-| Storage of record | **Parquet files on disk**, Hive-partitioned    | Raw runs are immutable, append-only, columnar, and compress extremely well against repetitive data. No database owns the truth, so no database can corrupt it.                                 |
-| Query engine      | **DuckDB**                                     | Reads the Parquet lake directly (`SELECT * FROM 'runs/**/*.parquet'`), supports `WITH RECURSIVE` for transitive dependency closure, and is embedded — no server, no port, no operator surface. |
-| Derived cache     | **One `naught.duckdb` file**                   | Materialized entities, edges, and drift, indexed for the UI. Pure cache. `rm naught.duckdb && naught rebuild` is always safe and is a tested path.                                             |
-| Queue             | **Redis** + BullMQ                             | Collection is bursty and retryable. Collectors call rate-limited external APIs; retry with backoff, blocked-job visibility, and survival across restarts are worth one container.              |
+| Layer             | Choice                                         | Why                                                                                                                                                                                                                |
+|-------------------|------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Backend           | **NestJS** (TypeScript)                        | Module per collector; dependency injection makes collectors swappable; built-in scheduler and queue integration; GraphQL is first-class (which matters if we ever federate with GUAC).                              |
+| Frontend          | **Next.js** + **Blueprint** (`@blueprintjs/*`) | Blueprint is Palantir's React toolkit, Apache-2.0, built for data-dense analytical interfaces. It is the correct aesthetic and functional fit for this application.                                                |
+| Storage of record | **Parquet files on disk**, Hive-partitioned    | Raw runs are immutable, append-only, columnar, and compress extremely well against repetitive data. No database owns the truth, so no database can corrupt it.                                                     |
+| Query engine      | **DuckDB**                                     | Reads the Parquet lake directly (`SELECT * FROM 'runs/**/*.parquet'`), supports `WITH RECURSIVE` for transitive dependency closure, and is embedded — no server, no port, no operator surface.                     |
+| Derived cache     | **One `naught.duckdb` file**                   | Materialized entities, edges, and drift, indexed for the UI. Pure cache. `rm naught.duckdb && naught rebuild` is always safe and is a tested path.                                                                 |
+| Queue             | **Redis** + BullMQ                             | Collection is bursty and retryable. Collectors call rate-limited external APIs; retry with backoff, blocked-job visibility, and survival across restarts are worth one container.                                  |
 | Run events        | **WebSocket** (`ws`), on the API's own port    | A run started from the interface outlives its request. The browser uses its native `WebSocket`, so the interface gains no dependency for it; the API shares the HTTP port, so deployment gains no second listener. |
-| Validation        | **zod**                                        | TypeScript types vanish at runtime. Every external payload is validated at the boundary before it is trusted.                                                                                  |
-| Shared types      | A `packages/shared` workspace                  | One set of types across collectors, API, and UI. This is the main reason the whole stack is TypeScript.                                                                                        |
+| Validation        | **zod**                                        | TypeScript types vanish at runtime. Every external payload is validated at the boundary before it is trusted.                                                                                                      |
+| Shared types      | A `packages/shared` workspace                  | One set of types across collectors, API, and UI. This is the main reason the whole stack is TypeScript.                                                                                                            |
 
-**Why not Postgres.** Postgres was the first candidate and remains the fallback if the graph outgrows recursive CTEs. It lost on shape, not on capability: Naught's central question is *"what is true now versus at time T"*, which is a columnar scan over immutable history — DuckDB's home ground and Postgres's worst case. DuckDB also removes a server, a port, a connection pool, and a backup procedure from the operator's surface, which is constraint #2 paying out. **If graph traversal becomes the bottleneck rather than history scanning, revisit this with an ADR.**
+**Why not Postgres.** Postgres was the first candidate and remains the fallback if the graph outgrows recursive CTEs. Naught's central question is *"what is true now versus at time T"*, which is a columnar scan over immutable history — DuckDB's home ground and Postgres's worst case. DuckDB also removes a server, a port, a connection pool, and a backup procedure from the operator's surface, which is constraint #2 paying out. **If graph traversal becomes the bottleneck rather than history scanning, revisit this with an ADR.**
 
-**Why not Go/Rust:** Naught is network-bound, not compute-bound. It waits on APIs. The advantage of a compiled runtime would be single-binary deployment, and an accepted server already removes most of that benefit. Schema sharing and UI velocity matter more here.
+**Why not Go/Rust:** Naught is network-bound, it waits on APIs and no need to ingest some Petabytes of JSON API. The advantage of a compiled runtime would be single-binary deployment, but a server run in container already removes most of that benefit. Schema sharing and UI velocity matter more here.
 
-**Why not Laravel:** a strong contender on capability, rejected on toolchain preference and because a split-language stack loses end-to-end shared types.
+**Why not Laravel:** a strong contender on capability, rejected on toolchain preference and because a split-language stack loses end-to-end shared types. Composer is quite flaky, PHP interpreter requires more effort just to make it run as fast as V8 engine.
 
-**The npm paradox is intentional.** Naught runs on the ecosystem it exists to watch. This is not an embarrassment — it is the acceptance test. Point Naught at Naught's own repository. If it cannot find the rot in itself, it does not work.
+**The npm paradox.** Naught runs on the ecosystem it exists to watch. This is not an embarrassment — it is the acceptance test. Point Naught at Naught's own repository. If it cannot find the rot in itself, it does not work.
 
 **Do not mix design systems.** Blueprint has its own visual language. Do not introduce shadcn/ui, Material, or Chakra alongside it.
 
@@ -124,25 +124,6 @@ There is no `migrations/` directory. Parquet files carry their own schema; the d
 
 A collector is a NestJS module implementing one interface. It fetches, validates with zod, and streams normalized observations plus an explicit record of what it could not see.
 
-```ts
-interface Collector {
-  readonly id: string;              // "deps.osv", "deps.guac", "image.registry"
-  readonly axis: Axis;
-  collect(scope: Scope, sink: RunSink): Promise<RunSummary>;
-}
-
-interface RunSink {
-  observation(o: Observation): Promise<void>;   // buffered into Parquet row groups
-  blindSpot(b: BlindSpot): Promise<void>;       // what it knew it could not see, and why
-}
-
-interface RunSummary {
-  observed: number;
-  expected: number | null;          // null means the collector cannot know the denominator
-  coverage: number | null;          // observed / expected — travels with every verdict downstream
-}
-```
-
 Observations stream to the sink rather than accumulating in a return value: a monorepo lock file can carry tens of thousands of entries, and the run must survive being larger than memory. `expected` is deliberately nullable — a collector that does not know how much it was supposed to see must say so rather than report 100%.
 
 ### Axes
@@ -155,13 +136,13 @@ Observations stream to the sink rather than accumulating in a return value: a mo
 | Configuration drift      | later  | declared node state             | node state now                       | Read declared state from a repo, compare to observed         | Read from a sibling tool if present        |
 | Credential staleness     | later  | intended lifetime               | time since last rotation             | Age since last rotation, from metadata only                  | —                                          |
 
-The three `later` axes exist in the `Axis` enum and in the data model from day one, but ship without collectors. They are not speculative — they are the reason the model is multi-axis — but nothing in v1 depends on them.
+The three `later` axes exist in the `Axis` enum and in the data model from day one, but ship without collectors. Need to re-evaluate if Naught really need to collect 3 of them as "decay axis".
 
-The lightweight path must always exist and must never require another service to be deployed.
+Just use the Occam's Razor, or YNGNI to decide.
 
 ### Base image tag drift, specifically
 
-`FROM node:20-alpine` is a promise that ages badly. The tag is mutable; the thing it named at build time is not the thing it names today.
+`FROM node:20-alpine` is a promise that ages badly. The tag is mutable.
 
 ```
 declared:   sha256:a1b2…   # digest the tag resolved to when the image was built
@@ -307,56 +288,57 @@ Unit of the graph (package version, purl) · retention (indefinite, compacted) �
 │  page.tsx  ───────┼──── lib/api.ts            │   NEXT_PUBLIC_NAUGHT_API_URL
 │  (force-dynamic)  │     NAUGHT_API_URL        │   (nướng vào bundle lúc BUILD)
 └─────────┬─────────┘     http://api:3001       │
-          │                (chỉ server thấy)    │
+          │              (chỉ server thấy)      │
           ▼                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  api   :3001        NestJS · một process, hai đường đi                      │
+│  api   :3001                    NestJS                                      │
 │                                                                             │
-│  ĐƯỜNG ĐỌC (GET, không trạng thái)     ĐƯỜNG CHẠY (POST, có trạng thái)     │
-│  ─────────────────────────────────     ──────────────────────────────────   │
+│  ĐƯỜNG ĐỌC (GET, stateless)            ĐƯỜNG CHẠY (POST stateful)           │
+│  ──────────────────────────            ──────────────────────────           │
 │  FindingsController                    RunsController ── RunBroadcaster ────┼──► ws
-│        │                                     │             (ws gateway,     │
-│        ▼                                     ▼              snapshot 30s)   │
+│        │                                     │           (ws gateway,       │
+│        ▼                                     ▼           snapshot 30s)      │
 │  FindingsService                       CollectionStarter         ▲          │
-│        │                                │    │    │              │          │
-│        │                     latestScope│    │    │refuse        │          │
-│        │                    (đọc .run.json)   │   │ nếu đang chạy │         │
-│        ▼                                 ▼    ▼                  │          │
+│        │                                │    │    │               │         │
+│        │                     latestScope│    │    │refuse         │         │
+│        │                   (đọc .run.json)   │    │ nếu chạy      │         │
+│        ▼                                ▼    ▼                    │         │
 │  LakeService.query()              BullRunQueue ──► Redis ──┐      │         │
 │  DuckDB :memory:                  jobId = collectorId      │      │         │
 │        │                          (trùng id ⇒ bị từ chối)  │      │         │
 │        │                                                   ▼      │         │
-│        │                               CollectionProcessor (concurrency 1)  │
+│        │                     CollectionProcessor (concurrency 1)  │         │
 │        │                                     │                    │         │
-│        │                          DepsOsvCollector.collect(scope, sink)     │
-│        │                                     │            └── OSV API (đọc) │
+│        │                    DepsOsvCollector.collect(scope, sink) │         │
+│        │                                     │  └── OSV API (đọc) │         │
 │        │                          ProgressReportingSink ──────────┘         │
 │        │                            (đếm, throttle 250ms)                   │
 │        │                                     │                              │
 │        │                             ParquetRunSink                         │
 │        │                          seal() ─┬─ .obs.parquet                   │
 │        ▼                                  └─ .run.json  (summary + scope)   │
-│    glob Parquet ◄─────────────────────────┘  discard() nếu hỏng             │
+│    glob Parquet ◄─────────────────────────┘   discard()  nếu run hỏng       │
 └──────────┬──────────────────────────────────────────────┬───────────────────┘
            │                                              │
            ▼                                              ▼
 ┌──────────────────────────────┐              ┌────────────────────────────┐
-│  volume  /var/lib/naught     │              │  redis  (không publish)    │
-│  ── SỰ THẬT ──               │              │  ── TRẠNG THÁI ĐIỀU PHỐI ──│
+│  volume  /var/lib/naught     │              │           redis            │
+│    --- True state ---        │              │  Giữ trạng thái điều phối  │
+│                              │              │  của lượt chạy,            │    
 │  runs/axis=deps/date=…/      │              │  không persist             │
 │    *.obs.parquet   bất biến  │              │  mất = chạy lại là xong    │
 │    *.blind.parquet append    │              └────────────────────────────┘
 │    *.run.json      only      │
-│  ── CACHE, vứt được ──       │      Run đang chạy KHÔNG BAO GIỜ vào lake.
-│  naught.duckdb               │      Lake chỉ nhận đúng 1 manifest khi seal,
+│  ── disposable cache ──      │      Run đang chạy không được ingest vào lake.
+│       naught.duckdb          │      Lake chỉ nhận đúng 1 manifest khi seal,
 └──────────────────────────────┘      và không nhận gì khi thất bại.
 
-Hai bất biến định hình toàn bộ thiết kế:
+Hai storage có trạng thái định hình toàn bộ thiết kế:
 
 ┌─────────────┬───────────────────────────┬────────────────────────────────────────────┐
-│             │      Sự thật (lake)       │ Trạng thái nhất thời (Redis + broadcaster) │
+│             │      Parquet lake         │            Redis + broadcaster             │
 ├─────────────┼───────────────────────────┼────────────────────────────────────────────┤
-│ Ghi khi     │ seal() thành công         │ ngay khi enqueue                           │
+│Write attempt│ seal() thành công         │ ngay khi enqueue                           │
 ├─────────────┼───────────────────────────┼────────────────────────────────────────────┤
 │ Mất thì sao │ không khôi phục được      │ chạy lại là xong                           │
 ├─────────────┼───────────────────────────┼────────────────────────────────────────────┤
