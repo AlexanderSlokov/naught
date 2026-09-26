@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type {
+  Axis,
   AxisAvailability,
   BlindSpotRow,
   DeltaView,
@@ -17,7 +18,7 @@ import { SubjectPanel } from '@/components/SubjectPanel';
 import { SubjectTable } from '@/components/SubjectTable';
 
 export interface ExplorerProps {
-  axis: string;
+  axis: Axis;
   axes: AxisAvailability[];
   project: ProjectRef | null;
   run: LatestRun | null;
@@ -38,7 +39,7 @@ export function Explorer(props: ExplorerProps): React.ReactElement {
 
   return (
     <div className="naught-shell">
-      <Header project={props.project} run={props.run} />
+      <Header axis={props.axis} project={props.project} run={props.run} />
       <AxisRail
         axes={props.axes}
         selected={props.axis}

@@ -224,3 +224,41 @@ body {
 .naught-table tbody tr[aria-selected='true'] .naught-drift {
   color: inherit;
 }
+
+/* A verdict and its evidence.
+   The first line answers "is there anything for me to do"; the second says how
+   it was arrived at. Two sizes and two weights, so the answer is read before
+   the reader has decided to read anything. */
+.naught-verdict {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 var(--naught-gap-1);
+  color: var(--naught-text);
+}
+
+.naught-verdict--settled {
+  color: var(--naught-muted);
+}
+
+.naught-verdict--attention {
+  color: var(--naught-warning);
+}
+
+.naught-evidence {
+  font-size: 12px;
+  margin: 0;
+  color: var(--naught-muted);
+}
+
+/* The header's one control, pushed to the far edge so the F-shaped scan meets
+   the state of the lake first and the thing that changes it last. */
+.naught-run {
+  display: flex;
+  align-items: center;
+  gap: var(--naught-gap-2);
+  margin-left: auto;
+}
+
+.naught-run-progress {
+  width: 120px;
+}

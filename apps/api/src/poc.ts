@@ -14,7 +14,8 @@ import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { DuckDBInstance } from '@duckdb/node-api';
 import { resolve } from 'node:path';
-import { AppModule } from './app.module.js';
+import { randomUUID } from 'node:crypto';
+import { StandaloneCollectionModule } from './standalone-collection.module.js';
 import { LakeService } from './lake/lake.service.js';
 import { CollectorRegistry } from './collectors/collector.registry.js';
 import { ParquetRunSink } from './lake/parquet-run-sink.js';
@@ -26,9 +27,14 @@ function rule(title: string): void {
   console.log(`\n\x1b[1m${title}\x1b[0m\n${'─'.repeat(64)}`);
 }
 
-const app = await NestFactory.createApplicationContext(AppModule, {
-  logger: ['warn', 'error'],
-});
+// Not `AppModule`: that one owns a queue, and this command must work on a
+// machine with no Redis (ARCHITECTURE §5).
+const app = await NestFactory.createApplicationContext(
+  StandaloneCollectionModule,
+  {
+    logger: ['warn', 'error'],
+  },
+);
 const lake = app.get(LakeService);
 const registry = app.get(CollectorRegistry);
 
@@ -40,12 +46,19 @@ await lake.ensureDirs();
 rule('1. Collect — Naught, pointed at Naught');
 console.log(`lockfile : ${lockfile}`);
 const startedAt = new Date();
-const sink = new ParquetRunSink(lake, collector.axis, collector.id, startedAt);
-const summary = await collector.collect(
-  { targets: [lockfile], since: null },
-  sink,
+const sink = new ParquetRunSink(
+  lake,
+  collector.axis,
+  collector.id,
+  startedAt,
+  randomUUID(),
 );
-const sealed = await sink.seal(summary);
+// Recorded in the manifest so the interface can repeat this run without an
+// operator retyping the path. A run that does not say what it was pointed at
+// cannot be asked for again.
+const scope = { targets: [lockfile], since: null };
+const summary = await collector.collect(scope, sink);
+const sealed = await sink.seal(summary, scope);
 
 console.log(`observed : ${summary.observed}`);
 console.log(`expected : ${summary.expected ?? 'unknown'}`);
@@ -73,7 +86,9 @@ const rows = findings.getRows();
 
 if (rows.length === 0) {
   const pct =
-    summary.coverage === null ? 'unknown' : `${(summary.coverage * 100).toFixed(1)}%`;
+    summary.coverage === null
+      ? 'unknown'
+      : `${(summary.coverage * 100).toFixed(1)}%`;
   // "Nothing found." on its own is a reassurance, and Naught does not give
   // those. The coverage travels with the verdict.
   console.log(`Nothing found, at ${pct} coverage.`);
@@ -161,7 +176,9 @@ const b = JSON.stringify(fromCache.getRows(), (_k, v) =>
 console.log(`rebuilt  : ${cachePath}`);
 console.log(`lake     : ${a}`);
 console.log(`cache    : ${b}`);
-console.log(a === b ? '\n\x1b[32mIdentical.\x1b[0m' : '\n\x1b[31mDIVERGED.\x1b[0m');
+console.log(
+  a === b ? '\n\x1b[32mIdentical.\x1b[0m' : '\n\x1b[31mDIVERGED.\x1b[0m',
+);
 
 cache.closeSync();
 cacheInstance.closeSync();

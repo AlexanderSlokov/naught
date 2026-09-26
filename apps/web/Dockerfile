@@ -18,6 +18,11 @@ FROM deps AS build
 COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
 COPY apps/web apps/web
+# Next inlines NEXT_PUBLIC_* into the browser bundle at build time; it is not
+# read at runtime. Setting it under `environment:` in compose looks correct and
+# silently ships whatever the default was, so it arrives here as a build arg.
+ARG NEXT_PUBLIC_NAUGHT_API_URL=http://localhost:3001
+ENV NEXT_PUBLIC_NAUGHT_API_URL=$NEXT_PUBLIC_NAUGHT_API_URL
 RUN pnpm --filter @naught/shared build && pnpm --filter @naught/web build
 
 FROM base AS runtime

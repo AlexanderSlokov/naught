@@ -36,10 +36,18 @@ Borrowed: the Page → Section → Widget tiering, the persistent header, the de
 budget, the F-shaped scan, and the intent palette — recorded in
 [`docs/references/palantir-*.md`](../references/).
 
-Not borrowed: actions. A Workshop application exists to *change* the objects it
-displays. Naught is read-only outward by the rule in ARCHITECTURE §2, so the
-screen has no write path, and the Action vocabulary of Workshop has no analogue
-here. The resemblance stops at the point where Foundry starts editing.
+Borrowed in one narrow form: actions. A Workshop application exists to *change*
+the objects it displays, and almost all of that vocabulary has no analogue here.
+The screen carries exactly one action, and it does not touch an object at all —
+it asks Naught to collect again. A run reads external systems and writes to none
+of them, which is why it does not breach the read-only rule in ARCHITECTURE §2;
+[ADR 0003](../adr/0003-actions-on-naughts-own-collection.md) draws that line and
+explains where it stops.
+
+What remains not borrowed is everything past that point. No observation can be
+edited from the screen, no finding retracted, no blind spot suppressed, and no
+run pointed somewhere new. The resemblance stops at the point where Foundry
+starts editing the objects themselves.
 
 ## The one rule the shape must not break
 

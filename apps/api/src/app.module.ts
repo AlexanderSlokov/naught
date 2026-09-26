@@ -1,18 +1,29 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { BullModule } from '@nestjs/bullmq';
+import { ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
-import { LakeModule } from './lake/lake.module.js';
-import { CollectorsModule } from './collectors/collectors.module.js';
+import { StandaloneCollectionModule } from './standalone-collection.module.js';
 import { FindingsModule } from './findings/findings.module.js';
+import { RunsModule } from './runs/runs.module.js';
 import { HealthController } from './health/health.controller.js';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env'] }),
+    StandaloneCollectionModule,
     ScheduleModule.forRoot(),
-    LakeModule,
-    CollectorsModule,
+    // Redis holds scheduling state, never truth. Losing it costs at most a
+    // collection run that has to be asked for again; the lake is untouched.
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get<string>('REDIS_HOST') ?? '127.0.0.1',
+          port: Number(config.get<string>('REDIS_PORT') ?? 6379),
+        },
+      }),
+    }),
     FindingsModule,
+    RunsModule,
   ],
   controllers: [HealthController],
 })

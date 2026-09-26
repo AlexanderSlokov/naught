@@ -38,7 +38,11 @@ coverage/
 # it is append-only operational data, not source. "Easy to throw away"
 # stops being true the moment history is committed here.
 data/
-runs/
+# Anchored, and it has to be. An unanchored `runs/` matches every directory of
+# that name at any depth, and `apps/api/src/runs/` is source — the module that
+# starts a collection. Git ignored it silently, which is the worst way to lose
+# a directory.
+/runs/
 *.parquet
 *.duckdb
 *.duckdb.wal

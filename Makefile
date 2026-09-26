@@ -37,8 +37,12 @@ typecheck: ## Typecheck every workspace package
 audit: ## Check the dependency tree against known advisories
 	pnpm audit --audit-level=moderate
 
+.PHONY: test
+test: ## Run every workspace package's tests
+	pnpm -r test
+
 .PHONY: check
-check: typecheck build audit ## Everything CI would run
+check: typecheck test build audit ## Everything CI would run
 
 # --- the point --------------------------------------------------------------
 

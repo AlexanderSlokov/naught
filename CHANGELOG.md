@@ -7,8 +7,32 @@ All notable changes to Naught are recorded here, following
 Entries are written for an operator: what changed, and why it mattered.
 
 ## [Unreleased]
-
 ### Added
+
+- **A collection can be started from the interface.** The header carries one
+  control, `Collect`, which queues a run and reports it as it happens: queued,
+  started, a progress bar once the collector knows its denominator, and then
+  either the sealed run or the reason it failed. When the run seals the whole
+  screen re-renders from it — coverage, subjects, delta and blind spots — so
+  the loop from "look again" to "here is what changed" closes without a
+  terminal. A second click while a run is in flight is refused, by the queue
+  and by the button both. The reasoning for an action existing at all in a
+  read-only tool is in
+  [ADR 0003](./docs/adr/0003-actions-on-naughts-own-collection.md): a run reads
+  external systems and writes to none of them.
+- **`POST /runs` and `GET /runs/current`**, beside a WebSocket at
+  `/runs/stream`. The API is no longer GET-only. It accepts cross-origin
+  requests from one named origin, `NAUGHT_WEB_ORIGIN`, and not from `*`.
+- **A run records what it was pointed at.** `CollectionRun.scope` is what lets
+  the interface repeat a run without an operator typing a path — and therefore
+  without a path arriving over HTTP. Runs sealed before the field existed carry
+  `null` and cannot be repeated; `POST /runs` says so and names the command
+  that fixes it, rather than guessing a scope.
+- **Tests.** The first in the repository: 35 of them, over scope resolution,
+  the duplicate-run refusal, the progress sink, the manifest's backward
+  compatibility, the sink's behaviour on a lake it cannot write to, and the
+  interface's run-state fold. `make check` runs them; it previously claimed to
+  be "everything CI would run" and ran none.
 
 - **The deps axis is readable without a terminal.** A read-only HTTP API over
   the lake (`GET /axes`, `/axes/:axis/{projects,latest,subjects,blind-spots,delta}`)
@@ -35,15 +59,57 @@ Entries are written for an operator: what changed, and why it mattered.
 
 ### Changed
 
+- **Panels state their conclusion before their evidence.** The delta strip used
+  to read *"Nothing changed since 2026-09-24 17:05:50 UTC. 0 findings still
+  open."* — accurate, and it asked the operator to combine a timestamp and a
+  count to arrive at *nothing to act on*. It now says that first, in one line,
+  with the timestamp beneath it. Blind spots likewise: *"Nothing this run knew
+  it could not see"* needed three negations resolved before it meant *nothing
+  went wrong*. The honesty is unchanged — an empty blind-spot list still hands
+  the reader to the coverage figure, because zero things unread is not the same
+  as everything looked at.
+- **`GET /runs/current` consults the queue, not only this process.** The event
+  stream's memory dies with the API; Redis does not. An operator who reloads
+  after a restart is told that a run is still in flight, rather than that
+  nothing is happening.
+- **The CLI no longer requires Redis.** `AppModule` gained a queue, and booting
+  it became a Redis connection — which hung `make poc-here` on a machine that
+  has none. The CLI entry points now boot `StandaloneCollectionModule`, which
+  carries the lake and the collectors and nothing that needs a service beside
+  it. ARCHITECTURE §5 requires the lightweight path to stay lightweight.
+- **`RunSink` gained `expected(n)`**, so a collector can state its denominator
+  when it learns it rather than only in its final summary. Without it a
+  progress reading has no ceiling, and a count climbing towards nothing is not
+  progress an operator can act on.
+- **`ParquetRunSink` takes its `runId` from the caller** instead of minting one
+  at seal, so the id an operator watches is the id in the manifest; and gained
+  `discard()`, which removes staging when a run dies.
+
 - **`LakeService.hasFiles(axis, kind)`** lets a reader ask whether the lake holds
   anything before querying it. DuckDB raises `IO Error: No files found that match
   the pattern` on an empty glob, so without this an axis no collector has run
   answers with a 500. An empty lake is a state, not a failure.
-- **`ParquetRunSink.seal()` now takes the run's `RunSummary`**, which it records
-  in the manifest. The only caller is the collection entry point, which already
-  had it in hand.
+- **`ParquetRunSink.seal()` now takes the run's `RunSummary` and its `Scope`**,
+  both of which it records in the manifest. Its callers — the CLI entry point
+  and the queue worker — each have both in hand already.
 
 ### Fixed
+
+- **An unwritable lake took the API down with it.** `createWriteStream` reports
+  a failed open as an asynchronous `'error'` event, and an unhandled one of
+  those ends the Node process. That was survivable while a collection was only
+  ever a CLI script. It stopped being survivable the moment a run could be
+  started from a button: one read-only partition, one full disk, and the whole
+  API exits instead of one run failing. The sink now owns its stream errors and
+  reports them to the caller, which reports them to the operator.
+- **A run whose rows never reached disk could still seal.** With no stream
+  there were no rows, no artifacts, and nothing to refuse on — so a manifest
+  would be written claiming a coverage figure with no Parquet behind it. The
+  sink now refuses to seal when a collector reports observations that never
+  arrived. A verdict with no rows under it still reads as a verdict.
+- **`.gitignore` silently excluded `apps/api/src/runs/`.** The pattern `runs/`
+  was meant for the lake and matched any directory of that name at any depth.
+  It is now anchored to the repository root.
 
 - **An empty lake no longer reads as an unreachable API.** Nest returns a bare
   200 with no body for a null result, and `Response.json()` throws on an empty

@@ -52,23 +52,21 @@ boundary.
 
 ## Phase 2 · A second axis, and the loop that closes itself
 
-**X1 — Trigger a collection from the interface**
-*Files:* `apps/api/src/collectors/` (a queue producer), `apps/web/components/Header.tsx`
+**X3 — A deployed Naught has no way to record its first scope**
+*Files:* `apps/api/src/collectors/`, `docker-compose.yml`, ARCHITECTURE §8
 *Depends on:* nothing outstanding
-A Workshop application attaches Actions to the objects it displays; the nearest
-analogue here is a control that starts a collection run rather than waiting for
-the schedule or for someone to type `make poc-here`. It is read-only outward —
-a run only reads external systems — so ARCHITECTURE §2 does not forbid it.
+Found while verifying X1 against `docker compose up`. The run button repeats the
+scope of the last run that recorded one, and on a fresh deployment no run has.
+`make poc-here` does not help: it runs on the host against `./data`, while the
+containers read a volume. The only way to seed a scope today is to exec into the
+API container and run the CLI by hand, which is not a thing an operator should
+have to know.
 
-Held back from Phase 1 because it is not a button. It needs BullMQ and Redis in
-the request path, a job whose state outlives the response, and a way for the
-interface to report the progress and the failure of something asynchronous.
-That is a larger surface than the entire read path it would sit beside, and it
-belongs with scheduled collection rather than as an exception inside a
-read-only POC.
-**Done when** a run can be started from the interface, its progress is visible,
-its failure is visible, and a second click while a run is in flight does not
-start a second run.
+ARCHITECTURE §8 already promises the fix — "one config file listing enabled
+collectors and their scopes" — and it does not exist. Until it does, a deployed
+Naught cannot collect anything without a shell.
+**Done when** a fresh `docker compose up` can run a collection from the
+interface without anyone entering a container.
 
 **X2 — Manifests for runs written before manifests existed**
 *Files:* `apps/api/src/lake/run-manifest.ts`
@@ -78,5 +76,10 @@ reports its coverage as unknown, which is correct and is also permanent — ther
 is no way to recover a denominator that was never recorded. Either accept that
 those runs read as unknown forever, or write a one-off tool that backfills a
 manifest with `expected: null` so the gap is explicit rather than incidental.
+Since X1 this has a second face. Manifests written before `CollectionRun.scope`
+existed carry `null`, so the run they describe cannot be repeated from the
+interface; `POST /runs` refuses and names `make poc-here`. That refusal is
+correct and is also permanent for those runs, which is the same shape of problem
+one level along. Whatever is decided here should cover both.
 **Done when** the intended behaviour for pre-manifest runs is decided and
 written down, whichever way it goes.

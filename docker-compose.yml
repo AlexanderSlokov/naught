@@ -10,6 +10,10 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       NAUGHT_API_PORT: "3001"
+      # The browser posts to /runs and opens the run socket from its own
+      # origin. Named, not '*': read-only outward describes the credentials
+      # Naught holds, not who may ask it to look.
+      NAUGHT_WEB_ORIGIN: ${NAUGHT_WEB_ORIGIN:-http://localhost:3000}
     env_file:
       - path: .env
         required: false
@@ -26,6 +30,12 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        # Where the *browser* reaches the API. `http://api:3001` below is the
+        # container network's name for it and resolves nowhere else, so the
+        # run button and its socket need this instead. Baked into the bundle
+        # during the build; changing it means rebuilding the web image.
+        NEXT_PUBLIC_NAUGHT_API_URL: ${NEXT_PUBLIC_NAUGHT_API_URL:-http://localhost:3001}
     environment:
       NAUGHT_API_URL: http://api:3001
     ports:

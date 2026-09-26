@@ -47,6 +47,7 @@ These are load-bearing. Breaking one requires an ADR that explains why.
 | Query engine      | **DuckDB**                                     | Reads the Parquet lake directly (`SELECT * FROM 'runs/**/*.parquet'`), supports `WITH RECURSIVE` for transitive dependency closure, and is embedded — no server, no port, no operator surface. |
 | Derived cache     | **One `naught.duckdb` file**                   | Materialized entities, edges, and drift, indexed for the UI. Pure cache. `rm naught.duckdb && naught rebuild` is always safe and is a tested path.                                             |
 | Queue             | **Redis** + BullMQ                             | Collection is bursty and retryable. Collectors call rate-limited external APIs; retry with backoff, blocked-job visibility, and survival across restarts are worth one container.              |
+| Run events        | **WebSocket** (`ws`), on the API's own port    | A run started from the interface outlives its request. The browser uses its native `WebSocket`, so the interface gains no dependency for it; the API shares the HTTP port, so deployment gains no second listener. |
 | Validation        | **zod**                                        | TypeScript types vanish at runtime. Every external payload is validated at the boundary before it is trusted.                                                                                  |
 | Shared types      | A `packages/shared` workspace                  | One set of types across collectors, API, and UI. This is the main reason the whole stack is TypeScript.                                                                                        |
 
@@ -99,13 +100,19 @@ Three containers: `api`, `web`, `redis`. One volume, holding the lake and the ca
 A run file is named `{collector}--{HHMMSS}-{nonce}.{obs|blind}.parquet`. The seconds and the nonce are not decoration: two runs of the same collector inside one clock tick would otherwise write the same name, and `COPY TO` overwrites silently — append-only in this document, last-write-wins on disk. The writer refuses to overwrite an existing run file rather than trusting the name to be unique.
 
 Beside them sits the run's manifest, `{stem}.run.json`, holding the collector's
-own `RunSummary`. Rows record what was seen; they cannot record what the
+own `RunSummary` and the `Scope` the run was pointed at. Rows record what was seen; they cannot record what the
 collector expected to see, and so they cannot answer *at what coverage*. A lake
 of 313 clean rows looks identical whether the collector read 313 packages or
 read 313 of 400 and gave up. Reconstructing the denominator from the rows would
 put the count at the mercy of the same collector that failed to count, which is
 what `RunSummary.expected` is nullable to prevent. The run states its coverage
 once, and every reader reads it rather than deriving it.
+
+The scope is recorded for a different reason: so that a run can be repeated
+without anyone naming a target again. The interface's one action is *look
+again*, and it can only mean that honestly if the lake remembers what was
+looked at. A manifest written before the field existed carries `null`, and a
+run that cannot say what it read is not repeated on a guess.
 
 Observations and blind spots are separate files because they share column names. A glob that matches both unions a *could not see it* row into a list of things that were seen, which is the lie by omission this project exists to refuse.
 

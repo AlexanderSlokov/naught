@@ -59,7 +59,7 @@ of a subject, and blind spots of a kind `deps` never produces (opaque layers).
 |---|---|
 | Observe base image tags and digests; detect a moved tag | Not started |
 | Run collection on a schedule rather than by hand | Not started |
-| Trigger a collection from the interface | Not started |
+| Trigger a collection from the interface | Done |
 | Notify once, with coverage, when something crosses a threshold (§7) | Not started |
 
 ---

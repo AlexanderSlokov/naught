@@ -4,6 +4,7 @@ import {
   DeltaView,
   LatestRun,
   ProjectRefs,
+  RunTicket,
   SubjectRows,
   type Axis,
   type AxisAvailability,
@@ -21,6 +22,19 @@ import {
  * observatory is indistinguishable from good news.
  */
 const BASE = process.env['NAUGHT_API_URL'] ?? 'http://127.0.0.1:3001';
+
+/**
+ * The API as the *browser* reaches it, which is not how the server reaches it.
+ *
+ * `NAUGHT_API_URL` is `http://api:3001` under compose — a name that resolves
+ * on the container network and nowhere else. Starting a run and following it
+ * happen in the browser, so they need an address the browser has.
+ *
+ * Inlined at build time by Next, not read at runtime: see the `ARG` in
+ * `apps/web/Dockerfile`.
+ */
+const PUBLIC_BASE =
+  process.env['NEXT_PUBLIC_NAUGHT_API_URL'] ?? 'http://localhost:3001';
 
 /**
  * Never cached. A drift observatory that serves yesterday's verdict is lying
@@ -64,4 +78,39 @@ export async function fetchBlindSpots(axis: Axis): Promise<BlindSpotRow[]> {
 
 export async function fetchDelta(axis: Axis): Promise<DeltaView> {
   return DeltaView.parse(await get(`/axes/${axis}/delta`));
+}
+
+/**
+ * Ask for a collection run on one axis. The run repeats the scope of the last
+ * run that recorded one; the interface supplies no path of its own.
+ *
+ * @example
+ * const ticket = await startRun('deps'); // follow ticket.runId on the socket
+ */
+export async function startRun(axis: Axis): Promise<RunTicket> {
+  const res = await fetch(`${PUBLIC_BASE}/runs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ axis }),
+  });
+  const body: unknown = await res.json();
+  // A refusal carries the reason the operator needs — already running, or no
+  // scope ever recorded. Dropping it for the status code would leave them
+  // looking at a button that did nothing.
+  if (!res.ok)
+    throw new Error(messageOf(body) ?? `POST /runs responded ${res.status}`);
+  return RunTicket.parse(body);
+}
+
+/** Where run events arrive. Same host and port as the API; http becomes ws. */
+export function runStreamUrl(): string {
+  return `${PUBLIC_BASE.replace(/^http/, 'ws')}/runs/stream`;
+}
+
+/** Nest puts the reason in `message`, as a string or a list of them. */
+function messageOf(body: unknown): string | null {
+  const message = (body as { message?: unknown } | null)?.message;
+  if (typeof message === 'string') return message;
+  if (Array.isArray(message)) return message.join('; ');
+  return null;
 }

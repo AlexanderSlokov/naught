@@ -42,6 +42,11 @@ export class DepsOsvCollector implements Collector {
         const lock = await readPnpmLock(target);
         entries = lock.entries;
         expected += lock.entries.length + lock.unparseable.length;
+        // The denominator is known the moment the lockfile is read, long
+        // before the OSV round trips that dominate the run. Announcing it here
+        // is what lets a watching interface show a proportion rather than a
+        // count climbing towards nothing.
+        await sink.expected(expected);
 
         for (const key of lock.unparseable) {
           await sink.blindSpot({
@@ -100,7 +105,8 @@ export class DepsOsvCollector implements Collector {
             subject: toPurl(entry),
             container: target,
             declared: entry.version,
-            observed: vulns.length === 0 ? 'clean' : vulns.map((v) => v.id).join(','),
+            observed:
+              vulns.length === 0 ? 'clean' : vulns.map((v) => v.id).join(','),
             drift: vulns.length,
             detail: { advisories: vulns.map((v) => v.id) },
           });

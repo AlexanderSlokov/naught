@@ -1,11 +1,17 @@
 // noinspection SqlNoDataSourceInspection,SqlResolve
 // The SQL below runs against an in-memory DuckDB pointed at Parquet files.
 // There is no datasource to configure, by design.
-import { createWriteStream, type WriteStream } from 'node:fs';
-import { access, mkdir, rm } from 'node:fs/promises';
-import { randomBytes, randomUUID } from 'node:crypto';
+import type { WriteStream } from 'node:fs';
+import { access, mkdir, open, rm } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import type { Axis, BlindSpot, Observation, RunSummary } from '@naught/shared';
+import type {
+  Axis,
+  BlindSpot,
+  Observation,
+  RunSummary,
+  Scope,
+} from '@naught/shared';
 import type { LakeService } from './lake.service.js';
 import { writeManifest } from './run-manifest.js';
 import {
@@ -37,18 +43,33 @@ export class ParquetRunSink {
   private observedCount = 0;
   private blindSpotCount = 0;
 
+  /**
+   * The first write error, held rather than thrown from where it happened.
+   *
+   * A stream reports a failed write as an asynchronous `'error'` event, and an
+   * unhandled one of those ends the process — which used to mean a CLI script
+   * dying and now means the API. Errors are captured here and re-thrown from
+   * the next sink call or from `seal`, on a stack the caller can report to an
+   * operator.
+   */
+  private failure: Error | null = null;
+
+  /**
+   * @param runId Minted by whoever started the run, not by this sink. The
+   *   interface shows an operator a run id the moment they ask for a run,
+   *   which is before any file exists; generating a second id at seal would
+   *   leave the manifest naming a run nobody watched.
+   */
   constructor(
     private readonly lake: LakeService,
     private readonly axis: Axis,
     private readonly collectorId: string,
     private readonly startedAt: Date,
+    private readonly runId: string,
   ) {}
 
   private get stem(): string {
-    const hhmmss = this.startedAt
-      .toISOString()
-      .slice(11, 19)
-      .replace(/:/g, '');
+    const hhmmss = this.startedAt.toISOString().slice(11, 19).replace(/:/g, '');
     return `${this.collectorId.replace(/\./g, '-')}--${hhmmss}-${this.nonce}`;
   }
 
@@ -58,16 +79,76 @@ export class ParquetRunSink {
     return join(dir, `.${this.stem}.${kind}.ndjson`);
   }
 
+  /**
+   * Ignored. The manifest takes its denominator from the sealed `RunSummary`,
+   * which is the collector's considered account; a mid-run figure is a
+   * progress reading and has no business in the lake.
+   */
+  async expected(_n: number): Promise<void> {}
+
   async observation(o: Observation): Promise<void> {
-    this.observations ??= createWriteStream(await this.staging('obs'));
-    this.observations.write(`${JSON.stringify(o)}\n`);
+    this.observations ??= await this.openStaging('obs');
+    this.append(this.observations, o);
     this.observedCount += 1;
   }
 
   async blindSpot(b: BlindSpot): Promise<void> {
-    this.blindSpots ??= createWriteStream(await this.staging('blind'));
-    this.blindSpots.write(`${JSON.stringify(b)}\n`);
+    this.blindSpots ??= await this.openStaging('blind');
+    this.append(this.blindSpots, b);
     this.blindSpotCount += 1;
+  }
+
+  /**
+   * Opens one staging file and takes ownership of its errors.
+   *
+   * The descriptor is opened and awaited before the stream exists, so that a
+   * lake this run cannot write to at all — a read-only volume, a full disk, a
+   * partition owned by someone else — rejects here, where the caller is still
+   * on the stack. `createWriteStream` alone reports that as an event nobody is
+   * listening for.
+   */
+  private async openStaging(kind: 'obs' | 'blind'): Promise<WriteStream> {
+    try {
+      const handle = await open(await this.staging(kind), 'w');
+      const stream = handle.createWriteStream();
+      stream.on('error', (err: Error) => (this.failure ??= err));
+      return stream;
+    } catch (err) {
+      // Recorded as well as thrown. The collector treats a sink error as one
+      // bad row and carries on; without this, `seal` would then be reached
+      // with no stream, no rows, and no reason to refuse.
+      this.failure ??= err instanceof Error ? err : new Error(String(err));
+      throw this.failure;
+    }
+  }
+
+  /** Buffered, not awaited: back-pressure is DuckDB's problem at seal time. */
+  private append(stream: WriteStream, row: Observation | BlindSpot): void {
+    this.refuseIfFailed();
+    stream.write(`${JSON.stringify(row)}\n`);
+  }
+
+  private refuseIfFailed(): void {
+    if (this.failure !== null) throw this.failure;
+  }
+
+  /**
+   * A collector's summary and this sink's own count have to agree about whether
+   * anything was written.
+   *
+   * They are two independent tallies of the same calls, so they can only
+   * disagree if rows were lost on the way to disk. Sealing anyway would put a
+   * manifest in the lake describing a run that did not happen — the mirror of
+   * the artifact check further down, and the more dangerous direction, because
+   * a coverage figure with no rows behind it still reads as a verdict.
+   */
+  private refuseIfRowsAreMissing(summary: RunSummary): void {
+    if (summary.observed > 0 && this.observedCount === 0) {
+      throw new Error(
+        `refusing to seal ${this.stem}: the collector reported ` +
+          `${summary.observed} observation(s) and none reached the sink`,
+      );
+    }
   }
 
   /**
@@ -84,7 +165,10 @@ export class ParquetRunSink {
    */
   async seal(
     summary: RunSummary,
+    scope: Scope,
   ): Promise<{ files: string[]; observed: number; blind: number }> {
+    this.refuseIfFailed();
+    this.refuseIfRowsAreMissing(summary);
     const dir = this.lake.partitionDir(this.axis, this.startedAt);
     const db = await this.lake.query();
     const files: string[] = [];
@@ -97,6 +181,7 @@ export class ParquetRunSink {
       await new Promise<void>((resolve, reject) =>
         stream.end((err?: Error | null) => (err ? reject(err) : resolve())),
       );
+      this.refuseIfFailed();
 
       const staged = join(dir, `.${this.stem}.${kind}.ndjson`);
       const target = join(dir, `${this.stem}.${kind}.parquet`);
@@ -105,7 +190,9 @@ export class ParquetRunSink {
       // assumed. DuckDB's COPY overwrites silently; a name collision here
       // would destroy a run that has already been reported on.
       if (await exists(target)) {
-        throw new Error(`refusing to overwrite an existing run file: ${target}`);
+        throw new Error(
+          `refusing to overwrite an existing run file: ${target}`,
+        );
       }
       await db.run(
         `COPY (SELECT * FROM read_json('${staged}', format = 'newline_delimited', columns = ${columnsClause(columns)})) ` +
@@ -119,7 +206,7 @@ export class ParquetRunSink {
     // artifacts that were never sealed would describe a run that did not
     // happen.
     await writeManifest(dir, this.stem, {
-      runId: randomUUID(),
+      runId: this.runId,
       collectorId: this.collectorId,
       axis: this.axis,
       startedAt: this.startedAt.toISOString(),
@@ -127,6 +214,7 @@ export class ParquetRunSink {
       status: 'complete',
       summary,
       artifacts: files,
+      scope,
     });
 
     return {
@@ -134,6 +222,29 @@ export class ParquetRunSink {
       observed: this.observedCount,
       blind: this.blindSpotCount,
     };
+  }
+
+  /**
+   * Abandon the run, leaving the lake exactly as it was.
+   *
+   * Staging files are dot-prefixed and no glob matches them, so a run that
+   * died without this left litter rather than corruption. That distinction
+   * stops holding once runs can be started by anyone with the screen open:
+   * litter accumulates once per failure, and "nothing was written" should be
+   * true rather than nearly true.
+   */
+  async discard(): Promise<void> {
+    const dir = this.lake.partitionDir(this.axis, this.startedAt);
+    for (const stream of [this.observations, this.blindSpots]) {
+      // `end` is given no error callback on purpose: this path is already
+      // reporting a failure, and a second one raised while cleaning up after
+      // the first would replace the cause with its own consequence.
+      if (stream)
+        await new Promise<void>((resolve) => stream.end(() => resolve()));
+    }
+    for (const kind of ['obs', 'blind'] as const) {
+      await rm(join(dir, `.${this.stem}.${kind}.ndjson`), { force: true });
+    }
   }
 }
 

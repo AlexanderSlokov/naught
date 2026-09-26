@@ -1,16 +1,20 @@
 import { H5, Tag } from '@blueprintjs/core';
-import type { LatestRun, ProjectRef } from '@naught/shared';
+import type { Axis, LatestRun, ProjectRef } from '@naught/shared';
 import { Coverage } from '@/components/Coverage';
+import { RunButton } from '@/components/RunButton';
 
 /**
  * The one part of the screen that never changes, holding what every other
  * part is relative to: which project, which axis, when it was last looked at,
- * and at what coverage.
+ * at what coverage — and, since ADR 0003, the one control that asks for
+ * another look.
  */
 export function Header({
+  axis,
   project,
   run,
 }: {
+  axis: Axis;
   project: ProjectRef | null;
   run: LatestRun | null;
 }): React.ReactElement {
@@ -46,6 +50,7 @@ export function Header({
           </Tag>
         </>
       )}
+      <RunButton axis={axis} />
     </header>
   );
 }
