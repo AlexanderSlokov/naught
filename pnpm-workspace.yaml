@@ -1,0 +1,51 @@
+packages:
+  - apps/*
+  - packages/*
+
+# --- supply chain -----------------------------------------------------------
+
+# A package published seven days ago has had seven days for someone to notice
+# it was compromised. The DuckDB npm compromise of September 2025 was caught
+# and pulled in about four hours; this window turns that class of incident
+# into something that never reaches the lockfile at all.
+#
+# It also delays legitimate security patches by a week. When one must land
+# now, `--ignore-minimum-release-age` is the escape hatch, and reaching for
+# it is a decision someone makes on purpose.
+minimumReleaseAge: 10080
+
+# pnpm does not run a dependency's install scripts unless it is listed here.
+# Under npm, install grants arbitrary code execution to every package in the
+# tree, transitively. Each `true` below is a deliberate grant.
+dangerouslyAllowAllBuilds: false
+allowBuilds:
+  # Verifies and links its platform binary at install time. Pulled in by tsx
+  # and vitest, both dev-only. Granted.
+  esbuild: true
+  # An optional native accelerator pulled in by bullmq. msgpackr falls back to
+  # pure JS without it. A speedup is not worth a compile step running as
+  # whoever ran the install. Refused.
+  msgpackr-extract: false
+
+# --- toolchain --------------------------------------------------------------
+#
+# These four lived in `.npmrc` until 2026-09-24, where pnpm 11 does not read
+# them: `pnpm config list` never showed them, and `save-exact=true` in an
+# .npmrc demonstrably still recorded `^2.5.1`. pnpm 11 moved its settings into
+# this file and renamed them to camelCase. Silently inert configuration is
+# worse than no configuration, because it is believed.
+
+# Refuse to run on an unpinned toolchain.
+engineStrict: true
+
+# Every version in package.json is exact. A range is a decision deferred to
+# install time, and install time is not where Naught wants its surprises.
+savePrefix: ''
+
+# A peer dependency that does not line up is a bug reported now, not a crash
+# reported by a user later.
+strictPeerDependencies: true
+
+# node_modules that has drifted from the lockfile is the exact condition
+# Naught exists to detect. It is not tolerated in Naught's own repository.
+verifyDepsBeforeRun: warn

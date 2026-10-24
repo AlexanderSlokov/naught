@@ -1,0 +1,25 @@
+{
+  "name": "naught",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Everything decays. Naught shows you where.",
+  "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=11.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r --parallel dev",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "audit": "pnpm audit --audit-level=moderate",
+    "rebuild-cache": "pnpm --filter @naught/api rebuild-cache"
+  },
+  "devDependencies": {
+    "prettier": "3.9.7",
+    "typescript": "5.9.3"
+  }
+}

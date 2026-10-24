@@ -1,0 +1,62 @@
+# Three services, one volume. There is no migration step: the Parquet files
+# carry their own schema and the cache is rebuilt, never upgraded.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NAUGHT_DATA_DIR: /var/lib/naught
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      NAUGHT_API_PORT: "3001"
+      # The browser posts to /runs and opens the run socket from its own
+      # origin. Named, not '*': read-only outward describes the credentials
+      # Naught holds, not who may ask it to look.
+      NAUGHT_WEB_ORIGIN: ${NAUGHT_WEB_ORIGIN:-http://localhost:3000}
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - naught-data:/var/lib/naught
+    ports:
+      - "3001:3001"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Where the *browser* reaches the API. `http://api:3001` below is the
+        # container network's name for it and resolves nowhere else, so the
+        # run button and its socket need this instead. Baked into the bundle
+        # during the build; changing it means rebuilding the web image.
+        NEXT_PUBLIC_NAUGHT_API_URL: ${NEXT_PUBLIC_NAUGHT_API_URL:-http://localhost:3001}
+    environment:
+      NAUGHT_API_URL: http://api:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    # The queue is scheduling state, not truth. If this volume is lost, the
+    # worst case is that a collection run happens again.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  # Back this up by copying it. `runs/` is the truth; `naught.duckdb` inside
+  # it is cache and is not worth the bytes.
+  naught-data:

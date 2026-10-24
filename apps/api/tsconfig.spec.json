@@ -1,0 +1,11 @@
+{
+  "$comment": "Tests live beside the code they cover, but must not be emitted: dist is what the container runs, and a compiled test there imports vitest, which production does not install.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "incremental": false
+  },
+  "include": ["src/**/*"],
+  "exclude": []
+}
