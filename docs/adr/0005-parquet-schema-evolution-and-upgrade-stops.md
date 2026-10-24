@@ -5,7 +5,7 @@
 
 ## Context
 
-Raw runs are kept forever (`ARCHITECTURE.md` §6). Two consequences follow that
+Raw runs are kept forever (`../explanation/ARCHITECTURE.md` §6). Two consequences follow that
 no other part of the design has to live with:
 
 - Files written years apart must answer one `SELECT`. DuckDB unions a glob by
@@ -63,7 +63,7 @@ to finish at each, rather than jumping from anywhere to anywhere
 - Startup gains a lake check beside the existing cache check, and the two are
   handled differently on purpose: a stale `naught.duckdb` is rebuilt without
   asking anyone, while a lake the code cannot read stops the API.
-  `ARCHITECTURE.md` §8 records this.
+  `../explanation/ARCHITECTURE.md` §8 records this.
 - Release notes acquire a job. A release that is an upgrade stop must say so in
   `CHANGELOG.md`, because an operator cannot discover the requirement from the
   artifact they are installing.

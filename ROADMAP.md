@@ -15,7 +15,7 @@ is described in [CHANGELOG.md](./CHANGELOG.md).
 
 One axis — `deps` — carried the whole way from collection to a screen an operator
 can read, so that the architecture is proven by a working path rather than by
-five half-built ones. The acceptance test in [ARCHITECTURE](./ARCHITECTURE.md) §9
+five half-built ones. The acceptance test in [ARCHITECTURE](docs/explanation/ARCHITECTURE.md) §9
 is the definition of done for this phase.
 
 | Capability | State |

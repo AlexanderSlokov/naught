@@ -1,6 +1,6 @@
 **Status:**  This file is the brief design document.
 
-Read `README.md` first for what Naught is and why it exists. This document covers *how* it is built and the reasoning behind each choice, so that a future contributor (human or agent) does not re-litigate settled decisions or violate a constraint without knowing it was deliberate.
+Read `../../README.md` first for what Naught is and why it exists. This document covers *how* it is built and the reasoning behind each choice, so that a future contributor (human or agent) does not re-litigate settled decisions or violate a constraint without knowing it was deliberate.
 
 ## 0. Glossary
 
@@ -149,7 +149,7 @@ It is not scoped to mean "no daemon". Watching global decay across many sources 
 | Queue             | **Redis** + BullMQ                             | Collection is bursty and retryable. Collectors call rate-limited external APIs; retry with backoff, blocked-job visibility, and survival across restarts are worth one container.                                  |
 | Run events        | **WebSocket** (`ws`), on the API's own port    | A run started from the interface outlives its request. The browser uses its native `WebSocket`, so the interface gains no dependency for it; the API shares the HTTP port, so deployment gains no second listener. |
 | Validation        | **zod**                                        | TypeScript types vanish at runtime. Every external payload is validated at the boundary before it is trusted.                                                                                                      |
-| Shared types      | A `packages/shared` workspace                  | One set of types across collectors, API, and UI. This is the main reason the whole stack is TypeScript.                                                                                                            |
+| Shared types      | A `../../packages/shared` workspace                  | One set of types across collectors, API, and UI. This is the main reason the whole stack is TypeScript.                                                                                                            |
 
 ### Why not Postgres
 
@@ -378,7 +378,7 @@ And when a week of running produces no notifications on a quiet week, and exactl
 
 Of the six questions this section opened with, three are answered below, two are deferred on purpose, and one is still open.
 
-Each answer is the decision of record. It is owed an ADR under `docs/adr/`, and the reasoning is written here first so that none of it is lost while `docs/` is reorganized into Diátaxis. Reversing one of these means writing the ADR that says why — not editing the paragraph.
+Each answer is the decision of record. It is owed an ADR under `../adr`, and the reasoning is written here first so that none of it is lost while `docs/` is reorganized into Diátaxis. Reversing one of these means writing the ADR that says why — not editing the paragraph.
 
 ### Answered
 
@@ -400,7 +400,7 @@ When none of the three is present, the axis does not guess, does not resolve the
 
 Raw runs are kept forever (§6), so files written years apart must answer one `SELECT`, and the lake outlives the code that wrote it. The rule follows GitLab's upgrade path (`docs.gitlab.com/update/upgrade_paths/`): most upgrades are unremarkable, a few are **required stops**, and the operator is told which rather than being allowed to skip one.
 
-- **Within a schema version, additions only.** A new column is appended, and files written before it read as `NULL` — readers union by name, which `apps/api/src/lake/schema.ts` declares rather than infers. No stop, no rewrite, any version to any version.
+- **Within a schema version, additions only.** A new column is appended, and files written before it read as `NULL` — readers union by name, which `../../apps/api/src/lake/schema.ts` declares rather than infers. No stop, no rewrite, any version to any version.
 - **A rename or a type change is a new schema version**, and the release carrying it is an upgrade stop. That release ships a rewriter: it reads the lake at the old version, writes it at the new one, verifies the result by the compaction invariant below, and only then lets the API serve. An operator may not jump across a stop, in the same way GitLab requires the latest patch of the current minor and every stop in between before a major.
 - **The version is recorded by the run**, in its manifest, beside the coverage figure and for the same reason: the writer states what it wrote and readers read it, rather than sniffing columns and inferring a generation. The column set in `schema.ts` as of this document is schema version **1**; a manifest that names no version is read as 1, and so is a run that has no manifest at all.
 - **The API refuses rather than improvises.** On startup it compares the lake's schema versions against what the code can read. Older and rewritable: it names the upgrade stop to install. Newer than the code: it refuses to serve, because reading tomorrow's columns under today's assumptions is how a lake starts lying quietly.

@@ -5,7 +5,7 @@
 
 ## Context
 
-`ARCHITECTURE.md` §2 states the first design constraint as **read-only
+`../explanation/ARCHITECTURE.md` §2 states the first design constraint as **read-only
 outward**: every credential Naught holds for an external system is read-only,
 and write access is a bug rather than a feature.
 

@@ -7,7 +7,7 @@ dashboard of counters.
 
 ## The operator's question is a selection, not an aggregate
 
-A dashboard answers "how many". The questions in [ARCHITECTURE](../../ARCHITECTURE.md)
+A dashboard answers "how many". The questions in [ARCHITECTURE](ARCHITECTURE.md)
 §9 are not of that kind:
 
 - *What is this project made of?* — a list of objects.

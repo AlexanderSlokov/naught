@@ -1,87 +1,83 @@
 # Naught
 
-> *Everything decays, even your software. Naught shows you that truth you tend to forget.*
+> *Everything decays, even your software.*
 
----
-
-## The discovery
-
-For a year, one question stood unanswered: if Naught - the deity whose name the Naughtian family carries - were a piece of software, what would she be?
-
-Naught is the goddess of endings and of the inevitable decay of all things. She desires humanity to change. But she does not change anyone. She is the end that is already certain; choosing to change is left to people.
-
-A piece of software that sees everything decaying, knows exactly where and how fast, and chooses to do nothing about it except show you. That is Naught.
+Naught is a software supply chain observer that show you how decay your software systems.
 
 ## The problem
 
-Software is not a static object. A running system is an emergent whole, assembled from thousands of small parts: packages, libraries, base images, configuration, certificates, credentials. Together they do the job. Individually, each one is decaying on its own clock.
+Software is not a static object. A running system is assembled from thousands of dependencies: 
+packages, libraries, base images, configuration, certificates, credentials... 
+Together they do the job, but each one is decaying, and they do not decay at the same speed:
 
-They do not decay at the same speed:
+- Certificates expire on 90 days. It is *Predictable.*
+- Vulnerabilities arrive from nowhere. It is *Sudden.*
+- Vendor libraries get abandoned. It is *Silent.*
+- Configuration drifts. It is *Gradual.*
 
-- Certificates expire on a known date. *Predictable.*
-- Vulnerabilities arrive without warning. *Sudden.*
-- Vendor libraries get abandoned. *Silent.*
-- Configuration drifts with every manual fix. *Gradual.*
+People points on a system and says "It works", but that says nothing about the health of a system. 
+And because the whole is emergent, so is its collapse as a system when one thing went wrong.
 
-The whole keeps running while its weakest part is already dead. "It works" says almost nothing about the health of a system. And because the whole is emergent, so is its collapse: in 2016, eleven lines of JavaScript named `left-pad` were removed from `npm`, and builds broke around the world.
-
-To see decay, you cannot look at the whole. You have to look at the parts, and at the joints between them.
+An example: In 2016, eleven lines of JavaScript named `left-pad` were removed from `npm`, and builds broke around the world. 
+But exceptionally, If your DevOps teams didn't set nightly builds, you won't see that coming.
 
 ## What Naught does
 
-Naught observes. It builds a picture of what your infrastructure is made of, and measures how far each part has drifted from the state it is supposed to be in.
+Naught is a read-only observer. It records what your systems are assembled from, and measures *drifts*: 
+the distance between your source of truth and the current state that Naught is checking.
 
-| Axis | Declared | Observed | Decay | Ships |
-|---|---|---|---|---|
-| Dependencies | what you built against | what upstream now says about it | rot, compromise, abandonment | **first** |
-| Base images | the digest you built against | what that tag resolves to today | a tag that moved under you | **first** |
-| Placement | the scheduling blueprint | where workloads actually run | placement drift | later |
-| Configuration | declared node state | node state now | configuration drift | later |
-| Credentials | intended lifetime | time since last rotation | staleness | later |
+Naught measures *drifts* along several *axes*:
 
-Each axis is a number. Together they form a **drift vector**, the entropy of your infrastructure made visible. The only event worth your attention is one of those numbers crossing a line you drew.
+| Axis          | Declared state                                  | Observed state                                 | Drift indicates                                           | Status    |
+|---------------|-------------------------------------------------|------------------------------------------------|-----------------------------------------------------------|-----------|
+| Dependencies  | The package versions that your lock file pins   | What advisory sources report about them now    | Vulnerable, compromised, or abandoned packages            | Available |
+| Base images   | The digest that a tag resolved to at build time | The digest that the same tag resolves to now   | The tag now points to a different image                   | Available |
+| Placement     | The scheduling plan                             | The nodes where workloads run                  | Workloads running outside their planned placement         | Planned   |
+| Configuration | The node state declared in your repository      | The current node state                         | Nodes whose configuration differs from the declared state | Planned   |
+| Credentials   | The intended lifetime of a credential           | The time since the credential was last rotated | Credentials in use past their intended lifetime           | Planned   |
 
-Naught answers questions like:
+Drift values are comparable within an axis, but not across axes. Together, the values from all of them form a *drift vector*.
 
-- What is this thing actually made of, right now?
-- Upstream just broke. Who is hit, and how far does it spread?
-- What did we touch, and when? *(the question that matters after an incident)*
-- What has quietly rotted since the last time anyone looked?
+> [!NOTE]
+> A drift value of `null` means that Naught observed the subject but could not compute a value. It does not mean that the drift is zero.
 
-## What Naught will never do
+Naught raises a warning when a drift value crosses a threshold you set, or when new things appear but was not present in the previous run.
 
-- **Never Remediate.** It does not patch, upgrade, restart, or roll back.
-- **Never do actions to mutate your systems.**
-- **Never need credentials with write access.**
-- **Never become a dependency.** Nothing else requires Naught to run.
-- **Never keep anything you cannot read without it.** Everything Naught retains is plain files on disk.
+### Use cases
 
-Naught shows. The operator decides.
+Naught answers questions such as:
 
-This is also why Naught is the only thing allowed to stand above everything else. A layer that *acts* on everything couples everything to itself. A layer that only *watches* couples nothing. Remove Naught, and every system keeps running exactly as before.
+- Which components does this system have right now?
+- An upstream package or image changed. Which of your systems depend on it, directly or transitively?
+- What changed in your systems, and when?
+- Which components have degraded since the last review?
+
+## What Naught not do
+
+- **Remediate.** It does not patch, upgrade, restart, or roll back your system. You have to take actions on your own.
+- **Mutate your system.** It only needs read-only roles & credentials.
+- **Become a dependency.** Just Docker, or a k8s-like system, which is a basic on any IT system.
+- **Storing data in unprocessable formats.** Everything Naught retains is plain files on disk.
+- **Vendor-locked you:** You can remove Naught and everything keeps running as before.
+
 
 ## Principles
 
-- **Inert.** Naught never take actions to the systems it observes, and its own state is append-only files it never edits. Collectors write but no rewrites. Every database, index, and view is derived, and can be thrown away and rebuilt from those files.
-- **Compact.** Each collector is a thin, replaceable adapter small enough to read in one sitting. The data format is the durable contract; the code around it is disposable.
-- **Transparent.** It never pretends to know better than the operator. Every conclusion shows where it came from.
-- **Independent.** Naught stands on its own. An axis can be fed by a sibling Naughtian tool if you run one, or by a plain adapter reading the underlying system directly. It never requires any of them.
-- **Zero hostage.** It reads what you already have: registries, repositories, nodes. Remove it, and nothing of yours is lost.
-- **Honest about blind spots.** What Naught cannot see is marked as `unknown`. A map that lies by omission is worse than no map at all.
-- **No verdict without coverage.** Every answer arrives with how much Naught actually look at. *"Nothing found, at 82% coverage"* is an answer. *"Nothing found"* is a reassurance, and Naught does not give those.
+- **Inert.** Its own state is append-only files. Collectors write but no rewrites. 
+Every database, index, and view is derived, and can be thrown away and rebuilt.
 
-## Part of the Naughtian family
+- **Compact.** Each collector is a thin, replaceable adapter small enough to read in one sitting. 
+The data format of Naught is the durable contract, but you can expect its code is disposable.
 
-| Tool        | The question it answers                                                  |
-| ----------- | ------------------------------------------------------------------------ |
-| Kuberina    | How do I place workloads without doing the math by hand?                 |
-| Kalena      | How do I fill the gaps the plan left behind by Kuberina?                 |
-| Kallisto    | How do I keep secrets without babysitting Vault or scattering env files? |
-| Helvilette  | How do I run Ansible without a basket of keys, and catch drift?          |
-| Ginnungagap | How to unify and managed Garage clusters?                                |
-| **Naught**  | **Where is everything decaying?**                                        |
+- **Transparent.** Every conclusion shows where it came from.
 
-Each tool stands alone. Composing them is your choice.
+- **Independent.** Naught stands on its own. It can be fed by a sibling tools if you have, but not requires any of them.
+
+- **Zero hostage.** Remove it, and nothing of yours is lost.
+
+- **Honest about blind spots.** What Naught cannot see is marked as `unknown`.
+
+- **No verdict without coverage.** Every answer arrives with how much Naught actually look at.
 
 ## License
 
