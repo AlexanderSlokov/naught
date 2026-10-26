@@ -52,25 +52,6 @@ boundary.
 
 ## Phase 2 · A second axis, and the loop that closes itself
 
-### Show the evidence behind each subject's answer
-
-**W9 — The header and delta read as settled over a stale lake**
-*Files:* `apps/web/components/Header.tsx`, `apps/web/components/DeltaStrip.tsx`,
-`apps/web/lib/dossier.ts`
-*Depends on:* nothing outstanding
-Found while verifying W8 against a lake whose latest run was 30 days old. Every
-row in the table read `stale`, while the header showed a green
-*100.0% coverage · 0 open* and the delta strip said *Nothing to act on*. Both
-are true of the run and misleading about the present: an operator scanning the
-F-shape meets the green tag first. The header should carry the age of the latest
-run and turn to a warning once its answers are past `staleAfter`; the delta's
-verdict should not be `settled` over stale answers.
-**Done when** a lake whose latest run is older than its claims' TTL shows the
-age in the header as a warning, and the delta strip does not say there is
-nothing to act on.
-
----
-
 **X4 — The image collector has no way to learn its declared digest**
 *Files:* `apps/api/src/collectors/image-registry.collector.ts` (new),
 `apps/api/src/collectors/collector.registry.ts`, ARCHITECTURE §5

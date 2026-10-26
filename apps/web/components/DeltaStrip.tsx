@@ -1,6 +1,7 @@
 import { Icon, type IconName, type Intent } from '@blueprintjs/core';
 import type { DeltaView, SubjectChange } from '@naught/shared';
 import { Verdict } from '@/components/Verdict';
+import { staleCaveat, type LakeFreshness } from '@/lib/freshness';
 
 /** Drift value meaning "not present in that run at all". Matches lake/delta.ts. */
 const ABSENT = -1;
@@ -16,12 +17,19 @@ const ABSENT = -1;
  * to do — before the evidence for it. Reading the timestamp and subtracting it
  * from the open count to arrive at that answer is work the screen should have
  * done already.
+ *
+ * Over answers that have gone stale, no verdict here is `settled`: "nothing
+ * changed between two runs a month ago" says nothing about today, and the
+ * strip says so before it says what moved.
  */
 export function DeltaStrip({
   delta,
+  freshness,
 }: {
   delta: DeltaView;
+  freshness: LakeFreshness;
 }): React.ReactElement {
+  const caveat = staleCaveat(freshness);
   return (
     <section>
       <p className="naught-label">
@@ -30,7 +38,11 @@ export function DeltaStrip({
           {delta.runs} run{delta.runs === 1 ? '' : 's'} in lake
         </span>
       </p>
-      {body(delta)}
+      {caveat === null ? (
+        body(delta)
+      ) : (
+        <OutOfDate caveat={caveat} delta={delta} />
+      )}
     </section>
   );
 }
@@ -45,6 +57,28 @@ function body(delta: DeltaView): React.ReactElement {
   }
   if (delta.changes.length === 0) return <NothingMoved delta={delta} />;
   return <Moved delta={delta} />;
+}
+
+/**
+ * Stale answers come first; what moved between the last two runs is still
+ * listed beneath, because it is still true of those runs.
+ */
+function OutOfDate({
+  caveat,
+  delta,
+}: {
+  caveat: string;
+  delta: DeltaView;
+}): React.ReactElement {
+  return (
+    <>
+      <Verdict tone="attention" says="These answers are out of date.">
+        {caveat} Collect again to learn the present; {delta.openFindings} open
+        as of the latest run.
+      </Verdict>
+      {delta.changes.length > 0 && <ChangeList changes={delta.changes} />}
+    </>
+  );
 }
 
 /** The quiet case, which is most runs, and the one easiest to render wrongly. */
@@ -80,18 +114,28 @@ function Moved({ delta }: { delta: DeltaView }): React.ReactElement {
         {delta.changes.length} change{delta.changes.length === 1 ? '' : 's'}{' '}
         since {at(delta.previousAt)} · {delta.openFindings} open in total.
       </Verdict>
-      <ul
-        style={{
-          margin: 'var(--naught-gap-2) 0 0',
-          padding: 0,
-          listStyle: 'none',
-        }}
-      >
-        {delta.changes.map((change) => (
-          <ChangeLine key={change.subject} change={change} />
-        ))}
-      </ul>
+      <ChangeList changes={delta.changes} />
     </>
+  );
+}
+
+function ChangeList({
+  changes,
+}: {
+  changes: SubjectChange[];
+}): React.ReactElement {
+  return (
+    <ul
+      style={{
+        margin: 'var(--naught-gap-2) 0 0',
+        padding: 0,
+        listStyle: 'none',
+      }}
+    >
+      {changes.map((change) => (
+        <ChangeLine key={change.subject} change={change} />
+      ))}
+    </ul>
   );
 }
 

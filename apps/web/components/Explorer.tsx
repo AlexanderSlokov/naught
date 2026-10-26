@@ -18,6 +18,7 @@ import { Header } from '@/components/Header';
 import { SubjectPanel } from '@/components/SubjectPanel';
 import { SubjectTable } from '@/components/SubjectTable';
 import { assessmentIndex, subjectKey } from '@/lib/dossier';
+import { freshnessOf } from '@/lib/freshness';
 
 export interface ExplorerProps {
   axis: Axis;
@@ -43,6 +44,10 @@ export function Explorer(props: ExplorerProps): React.ReactElement {
     () => assessmentIndex(props.assessments),
     [props.assessments],
   );
+  const freshness = useMemo(
+    () => freshnessOf(props.assessments),
+    [props.assessments],
+  );
   const assessment =
     subject === null
       ? null
@@ -51,7 +56,12 @@ export function Explorer(props: ExplorerProps): React.ReactElement {
 
   return (
     <div className="naught-shell">
-      <Header axis={props.axis} project={props.project} run={props.run} />
+      <Header
+        axis={props.axis}
+        project={props.project}
+        run={props.run}
+        freshness={freshness}
+      />
       <AxisRail
         axes={props.axes}
         selected={props.axis}
@@ -73,7 +83,7 @@ export function Explorer(props: ExplorerProps): React.ReactElement {
         />
       </aside>
       <div className="naught-strip">
-        <DeltaStrip delta={props.delta} />
+        <DeltaStrip delta={props.delta} freshness={freshness} />
         <BlindSpots blindSpots={props.blindSpots} />
       </div>
     </div>

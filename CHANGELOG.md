@@ -151,6 +151,17 @@ Entries are written for an operator: what changed, and why it mattered.
 
 ### Changed
 
+- **A run whose answers have gone stale no longer reads as settled.** Against a
+  lake whose latest run was 30 days old, every subject was marked `stale`
+  while the header showed a green *0 open* and the delta strip said *Nothing to
+  act on* — the first two things an operator reads. Once any answer from the
+  latest run is past its stale-after time, the header's run time turns to a
+  warning and states the age (*2026-09-26 11:03:54 UTC · 30 days old*), a zero
+  open count is no longer green, and the delta strip leads with *These answers
+  are out of date*, the number of stale answers, and the age of the newest one.
+  What moved between the last two runs is still listed beneath, because it is
+  still true of those runs.
+
 - **The API refuses to serve a lake it cannot read correctly.** At startup it
   exits with status 1 when the lake holds schema version 1 runs that have not
   been rewritten, or any run written at a schema version newer than this build

@@ -59,7 +59,7 @@ of a subject, and blind spots of a kind `deps` never produces (opaque layers).
 |---|---|
 | Record the schema version every run is written at | Done |
 | Keep every claim as source-attributed evidence | Done |
-| **Show the evidence behind each subject's answer** | In progress |
+| Show the evidence behind each subject's answer | Done |
 | Observe base image tags and digests; detect a moved tag | Not started |
 | Say plainly when an axis cannot be computed at all | Not started |
 | Run collection on a schedule rather than by hand | Not started |
