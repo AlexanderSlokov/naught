@@ -52,6 +52,34 @@ Naught answers questions such as:
 - What changed in your systems, and when?
 - Which components have degraded since the last review?
 
+## Naught, watching Naught
+
+Naught is built from the ecosystem it watches, so its first subject is itself.
+The screenshot below is Naught's interface after a collection run against
+Naught's own `pnpm-lock.yaml`, on 2026-10-26:
+
+![Naught's interface showing a run against its own lockfile: 325 of 325 packages answered, 8 carrying advisories, next@16.3.5 selected with 11.](docs/assets/naught-watching-naught.jpg)
+
+- **Coverage.** The run asked OSV about 325 packages and received an answer for
+  all 325: coverage 100%, no blind spots.
+- **Findings.** 8 of the 325 packages carry published advisories, 24 in total.
+  The previous run, on 2026-09-26, found none. All 8 were pinned at the same
+  versions then; the advisories were published between the two runs. Nothing
+  in the repository changed to cause them.
+- **Who is affected.** The worst is `next@16.3.5`, with 11 advisories: the
+  framework that renders the screen in the screenshot. `body-parser@2.3.0` and
+  `multer@2.4.0` sit beneath the API that served it the data. Naught found the
+  decay in the code that found it.
+- **Why Naught believes it.** The detail panel lists the evidence for
+  `next@16.3.5`: each advisory is a claim from OSV whose original source is the
+  GitHub Advisory Database, graded A2 (a completely reliable source; the claim
+  probably true), with the date OSV made the claim. The answer is marked stale
+  24 hours after the run, and the interface says so once it is.
+
+This is the acceptance test in
+[ARCHITECTURE §9](docs/explanation/ARCHITECTURE.md): if Naught cannot find the
+rot in itself, it does not work. The snake eating its own tail is the point.
+
 ## What Naught not do
 
 - **Remediate.** It does not patch, upgrade, restart, or roll back your system. You have to take actions on your own.

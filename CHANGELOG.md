@@ -211,6 +211,11 @@ Entries are written for an operator: what changed, and why it mattered.
 
 ### Fixed
 
+- **The subject table no longer scrolls sideways.** One long cell — the eleven
+  advisory ids listed against `next@16.3.5` — widened the whole table into a
+  horizontal scroll and defeated the ellipsis that was meant to shorten it. Columns now keep the widths their headers set, a long value
+  is cut with an ellipsis, and the full value is shown on hover.
+
 - **A short answer from OSV no longer counts as clean.** When OSV's batch
   response held fewer results than queries, `deps.osv` read each missing result
   as "no advisories". The whole batch is now recorded as not assessable

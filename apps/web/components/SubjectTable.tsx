@@ -44,7 +44,10 @@ export function SubjectTable({
                 subjectKey(row.subject, row.container),
               )}
             />
-            <td className="naught-mono bp6-text-muted">
+            <td
+              className="naught-mono bp6-text-muted"
+              title={row.observed ?? undefined}
+            >
               {row.observed ?? 'unknown'}
             </td>
           </tr>

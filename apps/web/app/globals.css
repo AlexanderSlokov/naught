@@ -149,6 +149,11 @@ body {
 .naught-table table {
   width: 100%;
   border-collapse: collapse;
+  /* Fixed, so a column is as wide as its header says and no wider. Under the
+     automatic layout one long cell — eleven advisory ids on next@16.3.5 —
+     widens the whole table and the ellipsis below never applies, which is
+     the horizontal scroll Foundry's guidance rules out. */
+  table-layout: fixed;
 }
 
 .naught-table thead th {
