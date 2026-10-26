@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { chmod, mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Observation, Scope } from '@naught/shared';
+import type { Claim, Scope } from '@naught/shared';
 import { ParquetRunSink } from './parquet-run-sink.js';
 import type { LakeService } from './lake.service.js';
 
@@ -30,26 +30,25 @@ class FakeLake {
   }
 }
 
-const observation = (subject: string): Observation => ({
+const claim = (subject: string): Claim => ({
   observedAt: STARTED.toISOString(),
-  collectorId: 'deps.osv',
-  axis: 'deps',
   subject,
+  subjectKind: 'package_version',
   container: '/repo/pnpm-lock.yaml',
-  declared: '1.0.0',
-  observed: 'clean',
-  drift: 0,
-  detail: {},
+  claimType: 'advisory',
+  observationKind: 'absent_in_scope',
+  sourceId: 'osv',
 });
 
+const IDENTITY = {
+  runId: RUN,
+  axis: 'deps',
+  collectorId: 'deps.osv',
+  collectorVersion: '2.0.0',
+} as const;
+
 function sinkOver(lake: FakeLake): ParquetRunSink {
-  return new ParquetRunSink(
-    lake as unknown as LakeService,
-    'deps',
-    'deps.osv',
-    STARTED,
-    RUN,
-  );
+  return new ParquetRunSink(lake as unknown as LakeService, IDENTITY, STARTED);
 }
 
 describe('ParquetRunSink, on a lake it cannot write to', () => {
@@ -77,27 +76,31 @@ describe('ParquetRunSink, on a lake it cannot write to', () => {
    */
   it('rejects rather than emitting an unhandled stream error', async () => {
     const sink = sinkOver(new FakeLake(root));
-    await expect(
-      sink.observation(observation('pkg:npm/a@1.0.0')),
-    ).rejects.toThrow(/EACCES|permission denied/);
+    await expect(sink.claim(claim('pkg:npm/a@1.0.0'))).rejects.toThrow(
+      /EACCES|permission denied/,
+    );
   });
 
   it('refuses to seal a run whose rows never landed', async () => {
     const sink = sinkOver(new FakeLake(root));
-    await sink
-      .observation(observation('pkg:npm/a@1.0.0'))
-      .catch(() => undefined);
+    await sink.claim(claim('pkg:npm/a@1.0.0')).catch(() => undefined);
 
     await expect(
-      sink.seal({ observed: 1, expected: 1, coverage: 1 }, SCOPE),
+      sink.seal(
+        {
+          observed: 1,
+          expected: 1,
+          coverage: 1,
+          scopeCompleted: SCOPE.targets,
+        },
+        SCOPE,
+      ),
     ).rejects.toThrow(/EACCES|permission denied/);
   });
 
   it('leaves no staging file behind when discarded', async () => {
     const sink = sinkOver(new FakeLake(root));
-    await sink
-      .observation(observation('pkg:npm/a@1.0.0'))
-      .catch(() => undefined);
+    await sink.claim(claim('pkg:npm/a@1.0.0')).catch(() => undefined);
     await sink.discard();
 
     await chmod(partition, 0o755);

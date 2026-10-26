@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CollectionRun } from './run.js';
+import { CollectionRun, schemaVersionOf, sealedStatusOf } from './run.js';
 
 /**
  * A manifest exactly as sealed before `scope` existed, copied from
@@ -39,5 +39,38 @@ describe('CollectionRun', () => {
       scope: { targets: [], since: null },
     });
     expect(parsed.success).toBe(false);
+  });
+});
+
+describe('schemaVersionOf', () => {
+  it('reads a manifest that names no version as version 1', () => {
+    expect(schemaVersionOf(CollectionRun.parse(MANIFEST_WITHOUT_SCOPE))).toBe(
+      1,
+    );
+  });
+
+  it('keeps a version that was recorded', () => {
+    const run = CollectionRun.parse({
+      ...MANIFEST_WITHOUT_SCOPE,
+      schemaVersion: 2,
+    });
+    expect(schemaVersionOf(run)).toBe(2);
+  });
+});
+
+describe('sealedStatusOf', () => {
+  const scope = {
+    targets: ['/a/pnpm-lock.yaml', '/b/pnpm-lock.yaml'],
+    since: null,
+  };
+
+  it('is complete when every target was read', () => {
+    expect(
+      sealedStatusOf(scope, ['/b/pnpm-lock.yaml', '/a/pnpm-lock.yaml']),
+    ).toBe('complete');
+  });
+
+  it('is partial when a target went unread', () => {
+    expect(sealedStatusOf(scope, ['/a/pnpm-lock.yaml'])).toBe('partial');
   });
 });

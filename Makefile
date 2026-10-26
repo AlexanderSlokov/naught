@@ -64,6 +64,10 @@ poc-here: ## One run against the real lake at NAUGHT_DATA_DIR
 poc-rotten: ## Same run against a lockfile known to be rotten — proves the detector fires
 	$(MAKE) poc LOCKFILE=$(CURDIR)/fixtures/rotten-lock.yaml
 
+.PHONY: migrate-lake
+migrate-lake: ## Upgrade stop: rewrite schema version 1 runs as version 2, keeping the originals
+	pnpm --filter @naught/api migrate-lake
+
 .PHONY: rebuild-cache
 rebuild-cache: ## Drop naught.duckdb and rebuild it from the Parquet lake
 	pnpm --filter @naught/api rebuild-cache

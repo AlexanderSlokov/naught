@@ -1,6 +1,7 @@
 import { Inject, Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
+import { summaryOf } from '@naught/shared';
 import { LakeService } from '../lake/lake.service.js';
 import { CollectorRegistry } from '../collectors/collector.registry.js';
 import { ParquetRunSink } from '../lake/parquet-run-sink.js';
@@ -39,19 +40,22 @@ export class CollectionProcessor extends WorkerHost {
     const startedAt = new Date();
     const parquet = new ParquetRunSink(
       this.lake,
-      collector.axis,
-      collector.id,
+      {
+        runId,
+        axis: collector.axis,
+        collectorId: collector.id,
+        collectorVersion: collector.version,
+      },
       startedAt,
-      runId,
     );
     this.events.started(runId, startedAt);
 
     try {
       const sink = new ProgressReportingSink(parquet, this.events, runId);
-      const summary = await collector.collect(scope, sink);
-      const sealed = await parquet.seal(summary, scope);
-      this.events.sealed(runId, summary, sealed.files);
-      this.log.log(`${runId} sealed ${sealed.observed} observation(s)`);
+      const report = await collector.collect(scope, sink);
+      const sealed = await parquet.seal(report, scope);
+      this.events.sealed(runId, summaryOf(report), sealed.files);
+      this.log.log(`${runId} sealed ${sealed.rows} evidence row(s)`);
     } catch (err) {
       await this.discard(parquet, runId, err);
       throw err;

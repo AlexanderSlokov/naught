@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { BlindSpot, Observation } from '@naught/shared';
+import type { Claim } from '@naught/shared';
 import type { RunSink } from '../collectors/collector.js';
 import {
   ProgressReportingSink,
@@ -10,18 +10,14 @@ const RUN = '33333333-3333-4333-8333-333333333333';
 
 /** Stands in for the Parquet sink: records what it was handed, writes nothing. */
 class FakeRunSink implements RunSink {
-  readonly observations: Observation[] = [];
-  readonly blindSpots: BlindSpot[] = [];
+  readonly claims: Claim[] = [];
   readonly denominators: number[] = [];
 
   async expected(n: number): Promise<void> {
     this.denominators.push(n);
   }
-  async observation(o: Observation): Promise<void> {
-    this.observations.push(o);
-  }
-  async blindSpot(b: BlindSpot): Promise<void> {
-    this.blindSpots.push(b);
+  async claim(c: Claim): Promise<void> {
+    this.claims.push(c);
   }
 }
 
@@ -47,26 +43,40 @@ class FakeClock {
   }
 }
 
-const observation = (subject: string): Observation => ({
+const ABOUT = {
   observedAt: '2026-09-26T10:00:00.000Z',
-  collectorId: 'deps.osv',
-  axis: 'deps',
-  subject,
+  subjectKind: 'package_version',
   container: '/repo/pnpm-lock.yaml',
-  declared: '1.0.0',
-  observed: 'clean',
-  drift: 0,
-  detail: {},
+} as const;
+
+/** OSV answered for the subject: one seen subject. */
+const observation = (subject: string, vuln = 'GHSA-aaaa'): Claim => ({
+  ...ABOUT,
+  subject,
+  claimType: 'advisory',
+  claimValue: { vuln },
+  observationKind: 'observed',
+  sourceId: 'osv',
 });
 
-const blindSpot = (subject: string): BlindSpot => ({
-  observedAt: '2026-09-26T10:00:00.000Z',
-  collectorId: 'deps.osv',
-  axis: 'deps',
+/** OSV did not answer for the subject: one unseen subject. */
+const blindSpot = (subject: string): Claim => ({
+  ...ABOUT,
   subject,
-  container: '/repo/pnpm-lock.yaml',
-  reason: 'unreachable-upstream',
+  claimType: 'advisory',
+  observationKind: 'not_assessable',
+  notAssessableReason: 'unreachable-upstream',
   note: 'OSV responded 503',
+  sourceId: 'osv',
+});
+
+/** The lockfile pins the subject: says nothing about whether it was answered. */
+const declaration = (subject: string): Claim => ({
+  ...ABOUT,
+  subject,
+  claimType: 'contains',
+  observationKind: 'observed',
+  sourceId: 'pnpm-lock',
 });
 
 function sink() {
@@ -84,12 +94,11 @@ function sink() {
 describe('ProgressReportingSink', () => {
   it('passes every row through unchanged', async () => {
     const { inner, subject } = sink();
-    await subject.observation(observation('pkg:npm/left-pad@1.3.0'));
-    await subject.blindSpot(blindSpot('pkg:npm/unseen@1.0.0'));
+    await subject.claim(observation('pkg:npm/left-pad@1.3.0'));
+    await subject.claim(blindSpot('pkg:npm/unseen@1.0.0'));
     await subject.expected(313);
 
-    expect(inner.observations).toHaveLength(1);
-    expect(inner.blindSpots).toHaveLength(1);
+    expect(inner.claims).toHaveLength(2);
     expect(inner.denominators).toEqual([313]);
   });
 
@@ -101,11 +110,28 @@ describe('ProgressReportingSink', () => {
 
   it('counts observations and blind spots separately', async () => {
     const { listener, clock, subject } = sink();
-    await subject.observation(observation('pkg:npm/a@1.0.0'));
+    await subject.claim(observation('pkg:npm/a@1.0.0'));
     clock.advance(300);
-    await subject.blindSpot(blindSpot('pkg:npm/b@1.0.0'));
+    await subject.claim(blindSpot('pkg:npm/b@1.0.0'));
 
     expect(listener.ticks.at(-1)).toEqual({ observed: 1, blind: 1 });
+  });
+
+  it('counts subjects, not rows: five advisories are one subject seen', async () => {
+    const { listener, clock, subject } = sink();
+    for (const vuln of ['GHSA-1', 'GHSA-2', 'GHSA-3', 'GHSA-4', 'GHSA-5']) {
+      clock.advance(300);
+      await subject.claim(observation('pkg:npm/lodash@4.17.20', vuln));
+    }
+    expect(listener.ticks.at(-1)).toEqual({ observed: 1, blind: 0 });
+  });
+
+  it('does not count a declaration as an answer', async () => {
+    const { listener, clock, subject } = sink();
+    await subject.claim(declaration('pkg:npm/a@1.0.0'));
+    clock.advance(300);
+    await subject.claim(observation('pkg:npm/b@1.0.0'));
+    expect(listener.ticks).toEqual([{ observed: 1, blind: 0 }]);
   });
 
   it('throttles: a burst inside one window reports once', async () => {
@@ -113,16 +139,16 @@ describe('ProgressReportingSink', () => {
     // each one would cost more than the work being reported.
     const { listener, subject } = sink();
     for (let i = 0; i < 50; i += 1) {
-      await subject.observation(observation(`pkg:npm/p${i}@1.0.0`));
+      await subject.claim(observation(`pkg:npm/p${i}@1.0.0`));
     }
     expect(listener.ticks).toHaveLength(1);
   });
 
   it('reports again once the window has passed', async () => {
     const { listener, clock, subject } = sink();
-    await subject.observation(observation('pkg:npm/a@1.0.0'));
+    await subject.claim(observation('pkg:npm/a@1.0.0'));
     clock.advance(250);
-    await subject.observation(observation('pkg:npm/b@1.0.0'));
+    await subject.claim(observation('pkg:npm/b@1.0.0'));
 
     expect(listener.ticks).toEqual([
       { observed: 1, blind: 0 },

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { Axis } from './axis.js';
-import { BlindSpot } from './observation.js';
 import { RunSummary } from './run.js';
+import { Evidence } from './evidence.js';
+import { Credibility, NotAssessableReason, Reliability } from './vocabulary.js';
 
 /**
  * What the read API returns, declared once and imported by both sides.
@@ -50,11 +51,12 @@ export type SubjectRow = z.infer<typeof SubjectRow>;
  * lake row it comes from, and is never merged into `SubjectRow` — "could not
  * see it" and "it is broken" are different facts.
  */
-export const BlindSpotRow = BlindSpot.pick({
-  subject: true,
-  container: true,
-  reason: true,
-  note: true,
+export const BlindSpotRow = z.object({
+  /** What could not be seen. A purl when known, a free description when not. */
+  subject: z.string().min(1),
+  container: z.string().min(1).nullable(),
+  reason: NotAssessableReason,
+  note: z.string().nullable(),
 });
 export type BlindSpotRow = z.infer<typeof BlindSpotRow>;
 
@@ -99,6 +101,52 @@ export const AxisAvailability = z.object({
 export type AxisAvailability = z.infer<typeof AxisAvailability>;
 
 /**
+ * How settled the answer about one subject is, as of the latest run. The five
+ * states of the RFC's assessment layer; see `assessment.sql.ts` for the rule.
+ */
+export const AssessmentState = z.enum([
+  'established',
+  'conflicting',
+  'stale',
+  'missing',
+  'not_assessable',
+]);
+export type AssessmentState = z.infer<typeof AssessmentState>;
+
+/**
+ * One derived judgement about one subject. Never stored: its staleness depends
+ * on the clock, so it is computed per request from evidence rows it names.
+ *
+ * @example
+ * { subject: 'pkg:npm/lodash@4.17.20', factor: 'known_advisories',
+ *   state: 'established', value: { listed: 5, advisories: ['GHSA-…'] },
+ *   bestReliability: 'A', bestCredibility: 2, ruleVersion: 'assess-v0', … }
+ */
+export const AssessmentRow = z.object({
+  subject: z.string().min(1),
+  container: z.string().nullable(),
+  factor: z.literal('known_advisories'),
+  state: AssessmentState,
+  value: z.object({
+    listed: z.int().nonnegative(),
+    advisories: z.array(z.string()),
+  }),
+  /** The evidence the state rests on. Empty only when the state is `missing`. */
+  supportingIds: z.array(z.string()),
+  /** Rows that contradict `supportingIds`. Non-empty only when `conflicting`. */
+  conflictingIds: z.array(z.string()),
+  /** Null when nothing was seen: an unseen claim has no grade worth showing. */
+  bestReliability: Reliability.nullable(),
+  bestCredibility: Credibility.nullable(),
+  observedAt: z.iso.datetime(),
+  staleAfter: z.iso.datetime().nullable(),
+  freshnessSeconds: z.int(),
+  ruleVersion: z.string().min(1),
+  asOf: z.iso.datetime(),
+});
+export type AssessmentRow = z.infer<typeof AssessmentRow>;
+
+/**
  * List forms, exported so that a consumer can validate a whole response
  * without taking a direct dependency on zod. `apps/web` holds no zod of its
  * own; adding one would change the lockfile, and the lockfile is the thing
@@ -108,3 +156,6 @@ export const SubjectRows = z.array(SubjectRow);
 export const BlindSpotRows = z.array(BlindSpotRow);
 export const ProjectRefs = z.array(ProjectRef);
 export const AxisAvailabilities = z.array(AxisAvailability);
+export const AssessmentRows = z.array(AssessmentRow);
+/** Every evidence row about one subject: the dossier behind its assessment. */
+export const EvidenceRows = z.array(Evidence);

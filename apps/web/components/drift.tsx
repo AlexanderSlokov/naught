@@ -3,7 +3,7 @@
  *
  * Null is not zero. A collector that saw a subject but could not place it on
  * the scale has said something different from "no drift", and the interface
- * has to keep those apart — `Observation.drift` is nullable for exactly this
+ * has to keep those apart — `SubjectRow.drift` is nullable for exactly this
  * reason.
  *
  * A class and not an inline colour, because a selected row inverts its

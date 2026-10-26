@@ -20,6 +20,8 @@ import { LakeService } from './lake/lake.service.js';
 import { CollectorRegistry } from './collectors/collector.registry.js';
 import { ParquetRunSink } from './lake/parquet-run-sink.js';
 import { deltaSinceLastRun, describe } from './lake/delta.js';
+import { evidenceSource, withEvidence } from './lake/evidence-views.js';
+import { lakeRefusal } from './lake/lake-version.js';
 
 const lockfile = resolve(process.argv[2] ?? './pnpm-lock.yaml');
 
@@ -42,16 +44,23 @@ const collector = registry.get('deps.osv');
 if (!collector) throw new Error('deps.osv is not registered');
 
 await lake.ensureDirs();
+// The same refusal as the API's: a version 2 run written into an unmigrated
+// version 1 lake would report itself as the first run ever made.
+const refusal = await lakeRefusal(lake.runsDir);
+if (refusal !== null) throw new Error(`refusing to collect: ${refusal}`);
 
 rule('1. Collect — Naught, pointed at Naught');
 console.log(`lockfile : ${lockfile}`);
 const startedAt = new Date();
 const sink = new ParquetRunSink(
   lake,
-  collector.axis,
-  collector.id,
+  {
+    runId: randomUUID(),
+    axis: collector.axis,
+    collectorId: collector.id,
+    collectorVersion: collector.version,
+  },
   startedAt,
-  randomUUID(),
 );
 // Recorded in the manifest so the interface can repeat this run without an
 // operator retyping the path. A run that does not say what it was pointed at
@@ -59,13 +68,16 @@ const sink = new ParquetRunSink(
 const scope = { targets: [lockfile], since: null };
 const summary = await collector.collect(scope, sink);
 const sealed = await sink.seal(summary, scope);
+const glob = lake.globFor(collector.axis);
 
 console.log(`observed : ${summary.observed}`);
 console.log(`expected : ${summary.expected ?? 'unknown'}`);
 console.log(
   `coverage : ${summary.coverage === null ? 'unknown' : `${(summary.coverage * 100).toFixed(1)}%`}`,
 );
-console.log(`blind    : ${sealed.blind}`);
+console.log(
+  `evidence : ${sealed.rows} row(s), ${sealed.unseen} not assessable`,
+);
 for (const f of sealed.files) console.log(`wrote    : ${f}`);
 
 rule('2. Query the lake — Parquet is the truth');
@@ -74,12 +86,10 @@ const db = await lake.query();
 // question is "what is this made of, right now", so this is scoped to the
 // latest run. History is what section 3 is for.
 const findings = await db.runAndReadAll(`
-  WITH obs AS (
-    SELECT * FROM read_parquet('${lake.globFor('deps', 'obs')}', union_by_name = true)
-  )
+  ${withEvidence(glob)}
   SELECT subject, observed AS advisories
-  FROM obs
-  WHERE drift > 0 AND observedAt = (SELECT max(observedAt) FROM obs)
+  FROM subject_drift
+  WHERE drift > 0 AND runId = (SELECT runId FROM latest_run)
   ORDER BY drift DESC, subject
 `);
 const rows = findings.getRows();
@@ -99,19 +109,17 @@ if (rows.length === 0) {
   }
 }
 
-// A glob that matches no files is an error in DuckDB, and "this run had
-// nothing it could not see" is a legitimate result, not a failure.
-if (sealed.blind === 0) {
+// "This run had nothing it could not see" is a legitimate result, and is
+// said in words rather than as an empty list.
+if (sealed.unseen === 0) {
   console.log('\nNo blind spots on this run.');
 } else {
   const blind = await db.runAndReadAll(`
-    WITH b AS (
-      SELECT * FROM read_parquet('${lake.globFor(collector.axis, 'blind')}', union_by_name = true)
-    )
-    SELECT reason, count(*) AS n
-    FROM b
-    WHERE observedAt = (SELECT max(observedAt) FROM b)
-    GROUP BY reason ORDER BY n DESC
+    ${withEvidence(glob)}
+    SELECT notAssessableReason, count(*) AS n
+    FROM evidence_unseen
+    WHERE runId = (SELECT runId FROM latest_run)
+    GROUP BY notAssessableReason ORDER BY n DESC
   `);
   console.log(
     `\nBlind spots: ${blind
@@ -122,7 +130,7 @@ if (sealed.blind === 0) {
 }
 
 rule('3. What changed since the previous run');
-const delta = await deltaSinceLastRun(db, lake.globFor('deps', 'obs'));
+const delta = await deltaSinceLastRun(db, glob);
 console.log(`runs in lake : ${delta.runs}`);
 
 if (delta.previousAt === null) {
@@ -148,8 +156,8 @@ const cachePath = resolve(lake.dataDir, 'naught.duckdb');
 // Every row ever written, on purpose: the cache must reproduce the whole
 // lake, not just the latest slice of it.
 const fromLake = await db.runAndReadAll(`
-  SELECT count(*), sum(drift)
-  FROM read_parquet('${lake.globFor('deps', 'obs')}', union_by_name = true)
+  ${withEvidence(glob)}
+  SELECT (SELECT count(*) FROM evidence), (SELECT sum(drift) FROM subject_drift)
 `);
 
 const { rm } = await import('node:fs/promises');
@@ -159,12 +167,14 @@ console.log(`dropped  : ${cachePath}`);
 
 const cacheInstance = await DuckDBInstance.create(cachePath);
 const cache = await cacheInstance.connect();
-await cache.run(`
-  CREATE TABLE observations AS
-  SELECT * FROM read_parquet('${lake.runsDir}/**/*.obs.parquet', union_by_name = true, hive_partitioning = true)
-`);
+await cache.run(
+  `CREATE TABLE evidence AS SELECT * FROM ${evidenceSource(glob)}`,
+);
+await cache.run(
+  `CREATE TABLE subject_drift AS ${withEvidence(glob)} SELECT * FROM subject_drift`,
+);
 const fromCache = await cache.runAndReadAll(
-  'SELECT count(*), sum(drift) FROM observations',
+  'SELECT (SELECT count(*) FROM evidence), (SELECT sum(drift) FROM subject_drift)',
 );
 
 const a = JSON.stringify(fromLake.getRows(), (_k, v) =>

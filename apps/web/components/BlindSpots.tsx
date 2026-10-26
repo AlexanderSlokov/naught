@@ -7,9 +7,9 @@ import { Verdict } from '@/components/Verdict';
  *
  * This is its own widget and never a row in the subject table. "We could not
  * see it" and "it is broken" are different facts; merging them is the lie by
- * omission the lake refuses at the storage layer, where `globFor` takes a
- * mandatory kind so the two file sets can never be unioned by accident. The
- * interface has to refuse it too.
+ * omission the lake refuses at the read layer, where every query starts from
+ * `evidence_seen` or `evidence_unseen` and never from the files (ADR 0007).
+ * The interface has to refuse it too.
  *
  * The verdict states what the number means before it states the caveat.
  * "Nothing this run knew it could not see" was accurate and asked the reader to

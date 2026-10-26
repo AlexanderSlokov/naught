@@ -1,5 +1,5 @@
 import type { RunSink } from '../collectors/collector.js';
-import type { BlindSpot, Observation } from '@naught/shared';
+import type { Claim } from '@naught/shared';
 
 /** One event per 250ms is a readable progress bar and a quiet socket. */
 const THROTTLE_MS = 250;
@@ -25,8 +25,12 @@ export interface RunProgressListener {
  * await collector.collect(scope, sink);
  */
 export class ProgressReportingSink implements RunSink {
-  private observed = 0;
-  private blind = 0;
+  /**
+   * Subjects, not rows. A package with five advisories is five rows and one
+   * answered package; counting rows would push the bar past its ceiling.
+   */
+  private readonly seen = new Set<string>();
+  private readonly unseen = new Set<string>();
   // Negative infinity, not zero: the first row must report. It is the moment
   // the run stops being "queued" and starts being visible, and against a clock
   // that begins at zero — a test's, or a process started at the epoch — a zero
@@ -46,16 +50,22 @@ export class ProgressReportingSink implements RunSink {
     await this.inner.expected(n);
   }
 
-  async observation(o: Observation): Promise<void> {
-    await this.inner.observation(o);
-    this.observed += 1;
+  async claim(c: Claim): Promise<void> {
+    await this.inner.claim(c);
+    const counted = this.tallyFor(c);
+    if (!counted) return;
+    counted.add(`${c.container ?? ''}\u0000${c.subject}`);
     this.report();
   }
 
-  async blindSpot(b: BlindSpot): Promise<void> {
-    await this.inner.blindSpot(b);
-    this.blind += 1;
-    this.report();
+  /**
+   * A `contains` claim that was observed declares a subject; it says nothing
+   * about whether the subject was answered for, so it moves neither count.
+   * Anything not assessable, a declaration included, is a subject unseen.
+   */
+  private tallyFor(c: Claim): Set<string> | null {
+    if (c.observationKind === 'not_assessable') return this.unseen;
+    return c.claimType === 'contains' ? null : this.seen;
   }
 
   /**
@@ -66,6 +76,6 @@ export class ProgressReportingSink implements RunSink {
     const at = this.now();
     if (at - this.lastReportAt < THROTTLE_MS) return;
     this.lastReportAt = at;
-    this.listener.progress(this.runId, this.observed, this.blind);
+    this.listener.progress(this.runId, this.seen.size, this.unseen.size);
   }
 }

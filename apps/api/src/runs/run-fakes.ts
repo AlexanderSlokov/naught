@@ -1,4 +1,4 @@
-import type { Axis, CollectionRun, Scope } from '@naught/shared';
+import type { Axis, CollectionRun, RunReport, Scope } from '@naught/shared';
 import type { Collector, RunSink } from '../collectors/collector.js';
 import type { ManifestStore } from './latest-scope.js';
 import type { CollectionJob, RunQueue } from './run-queue.js';
@@ -44,8 +44,10 @@ export class FakeCollector implements Collector {
     readonly axis: Axis,
   ) {}
 
-  async collect(_scope: Scope, _sink: RunSink) {
-    return { observed: 0, expected: 0, coverage: null };
+  readonly version = '0.0.0-fake';
+
+  async collect(_scope: Scope, _sink: RunSink): Promise<RunReport> {
+    return { observed: 0, expected: 0, coverage: null, scopeCompleted: [] };
   }
 }
 

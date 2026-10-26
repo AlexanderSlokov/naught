@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { DepsOsvCollector } from './deps-osv.collector.js';
 import { CollectorRegistry } from './collector.registry.js';
+import { HttpOsvClient, OSV_CLIENT } from './osv-client.js';
 
 /**
  * One module, one provider per collector. Adding an axis means adding a file
@@ -8,7 +9,11 @@ import { CollectorRegistry } from './collector.registry.js';
  * injection at all.
  */
 @Module({
-  providers: [DepsOsvCollector, CollectorRegistry],
+  providers: [
+    { provide: OSV_CLIENT, useClass: HttpOsvClient },
+    DepsOsvCollector,
+    CollectorRegistry,
+  ],
   exports: [CollectorRegistry],
 })
 export class CollectorsModule {}

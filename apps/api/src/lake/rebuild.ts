@@ -12,6 +12,8 @@
 import { DuckDBInstance } from '@duckdb/node-api';
 import { mkdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { evidenceSource, withEvidence } from './evidence-views.js';
+import { EVIDENCE_SUFFIX } from './schema.js';
 
 // Resolved, not relative. Under a workspace runner the cwd is whichever
 // package is executing, and a lake that moves depending on who asked is not
@@ -27,24 +29,26 @@ await rm(`${cache}.wal`, { force: true });
 const instance = await DuckDBInstance.create(cache);
 const db = await instance.connect();
 
-let observations = 0;
+// Every axis at once: `runId` is unique across the lake, so the derived rows
+// stay keyed correctly. Assessments are not cached — their staleness depends on
+// the clock, so a stored one is wrong the moment time passes.
+const glob = join(runs, '**', `*${EVIDENCE_SUFFIX}`);
+let rows = 0;
 try {
-  await db.run(`
-    CREATE TABLE observations AS
-    SELECT * FROM read_parquet('${runs}/**/*.obs.parquet', union_by_name = true, hive_partitioning = true)
-  `);
-  await db.run(`
-    CREATE TABLE blind_spots AS
-    SELECT * FROM read_parquet('${runs}/**/*.blind.parquet', union_by_name = true, hive_partitioning = true)
-  `);
-  const r = await db.runAndReadAll('SELECT count(*) FROM observations');
-  observations = Number(r.getRows()[0]?.[0] ?? 0);
+  await db.run(
+    `CREATE TABLE evidence AS SELECT * FROM ${evidenceSource(glob)}`,
+  );
+  await db.run(
+    `CREATE TABLE subject_drift AS ${withEvidence(glob)} SELECT * FROM subject_drift`,
+  );
+  const r = await db.runAndReadAll('SELECT count(*) FROM evidence');
+  rows = Number(r.getRows()[0]?.[0] ?? 0);
 } catch {
   // An empty lake is a legitimate state, not a failure: nothing has been
   // collected yet. It is reported as zero coverage, never as a clean run.
-  console.warn('lake is empty; cache built with no observations');
+  console.warn('lake is empty; cache built with no evidence');
 }
 
 db.closeSync();
 instance.closeSync();
-console.log(`rebuilt ${cache} from ${observations} observation(s)`);
+console.log(`rebuilt ${cache} from ${rows} evidence row(s)`);

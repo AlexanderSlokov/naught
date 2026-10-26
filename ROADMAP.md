@@ -57,9 +57,10 @@ of a subject, and blind spots of a kind `deps` never produces (opaque layers).
 
 | Capability | State |
 |---|---|
+| Record the schema version every run is written at | Done |
+| Keep every claim as source-attributed evidence | Done |
 | Observe base image tags and digests; detect a moved tag | Not started |
 | Say plainly when an axis cannot be computed at all | Not started |
-| Record the schema version every run is written at | Not started |
 | Run collection on a schedule rather than by hand | Not started |
 | Trigger a collection from the interface | Done |
 | Notify once, with coverage, when something crosses a threshold (§7) | Not started |
@@ -99,6 +100,45 @@ not in code.
 **Done when** a sealed manifest carries its schema version, a manifest written
 before the field existed reads as version 1, and an API booted against a lake
 written at a version it does not know refuses to serve and names what it found.
+
+### Keep every claim as source-attributed evidence
+
+A schema version 1 run stores one row per package: `pkg:npm/lodash@4.17.20`,
+`drift: 5`. That row cannot say which source made each of the five claims, how
+far that source is trusted for that kind of claim, when the source made it, or
+when the claim stops being current. A `drift: 0` row is worse: it reads as
+"this package is clean", while the fact Naught actually holds is narrower —
+"OSV had no published advisory for `pkg:npm/lodash@4.17.21` when Naught asked at
+16:17 UTC".
+
+Schema version 2 replaces the observation and blind spot rows with one
+**evidence** row per claim. A claim is one statement from one source about one
+subject, for example "OSV lists `GHSA-35jh-r3h4-6jhm` against
+`pkg:npm/lodash@4.17.20`". Each row records:
+
+- the source, and that source's reliability for that claim type (A–F);
+- the credibility of the claim itself (1–6);
+- whether the claim was *observed*, *absent from a source that covers the
+  subject*, or *not assessable*, with a reason;
+- when Naught saw the claim, when the source made it, and when it goes stale.
+
+Drift is no longer stored. It is derived from the evidence rows, together with a
+per-subject **assessment** that states whether the answer is established, stale,
+or not assessable. The model and its sources are in
+[`docs/references/rfcs/Palantir_and_Naught.en.md`](docs/references/rfcs/Palantir_and_Naught.en.md);
+the decisions are in ADR 0007 and ADR 0008.
+
+Because the column set changes, **v0.2.0 is an upgrade stop** under
+[ADR 0005](docs/references/adr/0005-parquet-schema-evolution-and-upgrade-stops.md).
+It ships `make migrate-lake`, which rewrites every version 1 run as version 2
+and keeps the version 1 files in place.
+
+**Done when** a `deps.osv` run writes exactly one `*.evidence.parquet` file, in
+which every row names its source, its A–F and 1–6 grades, and its observation
+kind; the five §9 questions return the same answers as before the change; a
+version 1 lake passed through `make migrate-lake` returns the same read API
+responses it returned before migration; and an API started against a version 1
+lake that has not been migrated refuses to serve and prints the command to run.
 
 ---
 

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { DuckDBConnection, DuckDBInstance } from '@duckdb/node-api';
 import { mkdir, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { EVIDENCE_SUFFIX } from './schema.js';
 
 /**
  * The lake is a directory of Parquet files and nothing else. This service is
@@ -53,32 +54,31 @@ export class LakeService implements OnModuleDestroy {
   }
 
   /**
-   * Reads the whole lake for one axis and one row kind. The glob is the
-   * entire query planner: a file that exists is included, a file that does
-   * not is not, and there is no index to fall out of sync with either.
+   * Reads the whole lake for one axis. The glob is the entire query planner: a
+   * file that exists is included, a file that does not is not, and there is no
+   * index to fall out of sync with either.
    *
-   * The kind is not optional. Observations and blind spots share a partition
-   * and share column names; a glob that matches both silently unions a
-   * "could not see it" row into a list of things that were seen, which is
-   * precisely the lie by omission this project exists to refuse.
+   * Only evidence files match. Version 1 `.obs` and `.blind` files left beside
+   * them by the rewriter are invisible to every reader (ADR 0007). Pass the
+   * glob to `withEvidence`, never to `read_parquet` directly.
    */
-  globFor(axis: string, kind: 'obs' | 'blind'): string {
-    return join(this.runsDir, `axis=${axis}`, '**', `*.${kind}.parquet`);
+  globFor(axis: string): string {
+    return join(this.runsDir, `axis=${axis}`, '**', `*${EVIDENCE_SUFFIX}`);
   }
 
   /**
-   * Whether the lake holds any file of this kind for this axis.
+   * Whether the lake holds any evidence for this axis.
    *
    * DuckDB raises `IO Error: No files found that match the pattern` on a glob
    * that matches nothing, so every reader must ask this before querying. A lake
    * with nothing in it is a legitimate state — no collector has run yet — and
    * not a query failure.
    */
-  async hasFiles(axis: string, kind: 'obs' | 'blind'): Promise<boolean> {
+  async hasFiles(axis: string): Promise<boolean> {
     const axisDir = join(this.runsDir, `axis=${axis}`);
     try {
       const entries = await readdir(axisDir, { recursive: true });
-      return entries.some((name) => name.endsWith(`.${kind}.parquet`));
+      return entries.some((name) => name.endsWith(EVIDENCE_SUFFIX));
     } catch {
       return false;
     }
@@ -90,8 +90,9 @@ export class LakeService implements OnModuleDestroy {
         recursive: true,
         withFileTypes: true,
       });
-      return entries.filter((e) => e.isFile() && e.name.endsWith('.parquet'))
-        .length;
+      return entries.filter(
+        (e) => e.isFile() && e.name.endsWith(EVIDENCE_SUFFIX),
+      ).length;
     } catch {
       return 0;
     }

@@ -1,6 +1,6 @@
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { CollectionRun } from '@naught/shared';
+import { CollectionRun, type CollectionRunInput } from '@naught/shared';
 
 /** Manifests sit beside the Parquet files they describe, one per run. */
 export const MANIFEST_SUFFIX = '.run.json';
@@ -20,10 +20,13 @@ export const MANIFEST_SUFFIX = '.run.json';
 export async function writeManifest(
   dir: string,
   stem: string,
-  run: CollectionRun,
+  run: CollectionRunInput,
 ): Promise<string> {
   const path = join(dir, `${stem}${MANIFEST_SUFFIX}`);
-  await writeFile(path, `${JSON.stringify(CollectionRun.parse(run), null, 2)}\n`);
+  await writeFile(
+    path,
+    `${JSON.stringify(CollectionRun.parse(run), null, 2)}\n`,
+  );
   return path;
 }
 
@@ -49,19 +52,32 @@ export async function readManifests(
 async function manifestPaths(axisDir: string): Promise<string[]> {
   try {
     const entries = await readdir(axisDir, { recursive: true });
-    return entries
-      .filter((name) => name.endsWith(MANIFEST_SUFFIX))
-      .map((name) => join(axisDir, name));
+    const names = entries.filter((name) => name.endsWith(MANIFEST_SUFFIX));
+    return withoutSuperseded(names).map((name) => join(axisDir, name));
   } catch {
     return [];
   }
 }
 
 /**
+ * A version 1 run that has been rewritten has two manifests:
+ * `{stem}.run.json` and `{stem}.v2.run.json`. They describe one run, so the
+ * original is dropped and the rewrite stands for it.
+ */
+function withoutSuperseded(names: readonly string[]): string[] {
+  const present = new Set(names);
+  const supersededBy = (name: string): string =>
+    `${name.slice(0, -MANIFEST_SUFFIX.length)}.v2${MANIFEST_SUFFIX}`;
+  return names.filter((name) => !present.has(supersededBy(name)));
+}
+
+/**
  * A manifest that cannot be parsed is skipped, not thrown on. One unreadable
  * run must not hide every other run in the lake.
  */
-async function parseManifest(path: string): Promise<CollectionRun | null> {
+export async function parseManifest(
+  path: string,
+): Promise<CollectionRun | null> {
   try {
     return CollectionRun.parse(JSON.parse(await readFile(path, 'utf8')));
   } catch {

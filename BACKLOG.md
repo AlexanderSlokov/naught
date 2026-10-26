@@ -84,23 +84,6 @@ ADR 0004's unavailable state.
 renders each with its own sentence, including the one that names what is
 missing.
 
-**X6 — Runs do not record the schema version they were written at**
-*Files:* `packages/shared/src/run.ts`, `apps/api/src/lake/parquet-run-sink.ts`,
-`apps/api/src/lake/run-manifest.ts`, `apps/api/src/main.ts`, ARCHITECTURE §4, §8
-*Depends on:* nothing outstanding
-[ADR 0005](docs/references/adr/0005-parquet-schema-evolution-and-upgrade-stops.md) makes
-the run responsible for stating its schema version, and nothing does. Every run
-sealed before the field exists is a run whose generation has to be assumed,
-which is the same shape of debt as X2 and gets worse with every collection.
-`schemaVersion` follows `scope`'s compatibility rule — nullable and defaulted, so
-older manifests keep parsing — and a manifest without it reads as version 1.
-The startup check is the other half: the API compares the lake against what the
-code can read, and refuses to serve a lake written ahead of it rather than
-reading unknown columns as `NULL`.
-**Done when** a sealed manifest carries `schemaVersion: 1`, a manifest written
-without the field parses and reads as 1, and an API booted against a lake at an
-unknown version exits naming the version it found and the one it can read.
-
 **X3 — A deployed Naught has no way to record its first scope**
 *Files:* `apps/api/src/collectors/`, `docker-compose.yml`, ARCHITECTURE §8
 *Depends on:* nothing outstanding
@@ -130,5 +113,8 @@ existed carry `null`, so the run they describe cannot be repeated from the
 interface; `POST /runs` refuses and names `make poc-here`. That refusal is
 correct and is also permanent for those runs, which is the same shape of problem
 one level along. Whatever is decided here should cover both.
+`make migrate-lake` already takes one position for the first face: a run with
+no manifest is rewritten with a manifest holding `summary: null` and
+`scope: null`, so its coverage reads as unknown and it cannot be repeated.
 **Done when** the intended behaviour for pre-manifest runs is decided and
 written down, whichever way it goes.

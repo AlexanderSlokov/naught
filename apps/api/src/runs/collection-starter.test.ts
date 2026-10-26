@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CollectionRun, Scope } from '@naught/shared';
+import { CollectionRun, type Scope } from '@naught/shared';
 import {
   CollectionStarter,
   NoCollectorError,
@@ -15,7 +15,7 @@ import {
 
 const SCOPE: Scope = { targets: ['/repo/pnpm-lock.yaml'], since: null };
 
-const SEALED: CollectionRun = {
+const SEALED: CollectionRun = CollectionRun.parse({
   runId: '11111111-1111-4111-8111-111111111111',
   collectorId: 'deps.osv',
   axis: 'deps',
@@ -25,7 +25,7 @@ const SEALED: CollectionRun = {
   summary: { observed: 313, expected: 313, coverage: 1 },
   artifacts: [],
   scope: SCOPE,
-};
+});
 
 function starter(queue: FakeRunQueue, runs: CollectionRun[] = [SEALED]) {
   return new CollectionStarter(

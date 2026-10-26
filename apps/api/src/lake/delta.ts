@@ -2,6 +2,7 @@
 // The SQL below runs against an in-memory DuckDB pointed at Parquet files.
 // There is no datasource to configure, by design.
 import type { DuckDBConnection } from '@duckdb/node-api';
+import { withEvidence } from './evidence-views.js';
 
 /** Absent from a run entirely, as distinct from present with zero drift. */
 export const ABSENT = -1;
@@ -33,49 +34,52 @@ export interface Delta {
  * means "unchanged", never "nothing is wrong" — `openFindings` carries the
  * standing total so the two can never be confused.
  *
- * A run is identified by its `observedAt`, which a collector stamps once per
- * collection. The lake is append-only, so the previous run is still there to
- * compare against; that is the whole reason nothing is ever deleted.
+ * A run is identified by its `runId`, and runs are ordered by the
+ * `observedAt` a collector stamps once per collection. The lake is
+ * append-only, so the previous run is still there to compare against; that is
+ * the whole reason nothing is ever deleted.
  */
 export async function deltaSinceLastRun(
   db: DuckDBConnection,
-  obsGlob: string,
+  glob: string,
 ): Promise<Delta> {
-  const source = `read_parquet('${obsGlob}', union_by_name = true)`;
-
-  const runsResult = await db.runAndReadAll(
-    `SELECT count(DISTINCT observedAt) FROM ${source}`,
+  const runs = Number(
+    await scalar(db, `${withEvidence(glob)} SELECT count(*) FROM runs`),
   );
-  const runs = Number(runsResult.getRows()[0]?.[0] ?? 0);
+  const openFindings = Number(
+    await scalar(
+      db,
+      `${withEvidence(glob)} SELECT count(*) FROM subject_drift
+       WHERE drift > 0 AND runId = (SELECT runId FROM latest_run)`,
+    ),
+  );
+  if (runs < 2) return { runs, previousAt: null, openFindings, changes: [] };
 
-  const openResult = await db.runAndReadAll(`
-    SELECT count(*) FROM ${source}
-    WHERE drift > 0 AND observedAt = (SELECT max(observedAt) FROM ${source})
-  `);
-  const openFindings = Number(openResult.getRows()[0]?.[0] ?? 0);
+  const previousAt = String(
+    await scalar(
+      db,
+      `${withEvidence(glob)} SELECT CAST(observedAt AS VARCHAR) FROM previous_run`,
+    ),
+  );
+  const changed = await db.runAndReadAll(changesSql(glob));
+  const changes: Change[] = changed.getRows().map((row) => ({
+    subject: String(row[0]),
+    was: Number(row[1]),
+    now: Number(row[2]),
+  }));
+  return { runs, previousAt, openFindings, changes };
+}
 
-  if (runs < 2) {
-    return { runs, previousAt: null, openFindings, changes: [] };
-  }
-
-  const previousResult = await db.runAndReadAll(`
-    SELECT CAST(max(observedAt) AS VARCHAR) FROM ${source}
-    WHERE observedAt < (SELECT max(observedAt) FROM ${source})
-  `);
-  const previousAt = String(previousResult.getRows()[0]?.[0] ?? '');
-
-  const changed = await db.runAndReadAll(`
-    WITH obs AS (SELECT * FROM ${source}),
+/** Subjects whose drift differs between the latest run and the one before it. */
+function changesSql(glob: string): string {
+  return `${withEvidence(glob)},
     cur AS (
-      SELECT subject, drift FROM obs
-      WHERE observedAt = (SELECT max(observedAt) FROM obs)
+      SELECT subject, drift FROM subject_drift
+      WHERE runId = (SELECT runId FROM latest_run)
     ),
     prev AS (
-      SELECT subject, drift FROM obs
-      WHERE observedAt = (
-        SELECT max(observedAt) FROM obs
-        WHERE observedAt < (SELECT max(observedAt) FROM obs)
-      )
+      SELECT subject, drift FROM subject_drift
+      WHERE runId = (SELECT runId FROM previous_run)
     )
     SELECT
       coalesce(cur.subject, prev.subject) AS subject,
@@ -83,16 +87,12 @@ export async function deltaSinceLastRun(
       coalesce(cur.drift, ${ABSENT}) AS now
     FROM cur FULL OUTER JOIN prev ON cur.subject = prev.subject
     WHERE coalesce(cur.drift, ${ABSENT}) <> coalesce(prev.drift, ${ABSENT})
-    ORDER BY now DESC, subject
-  `);
+    ORDER BY now DESC, subject`;
+}
 
-  const changes: Change[] = changed.getRows().map((row) => ({
-    subject: String(row[0]),
-    was: Number(row[1]),
-    now: Number(row[2]),
-  }));
-
-  return { runs, previousAt, openFindings, changes };
+async function scalar(db: DuckDBConnection, sql: string): Promise<unknown> {
+  const result = await db.runAndReadAll(sql);
+  return result.getRows()[0]?.[0] ?? null;
 }
 
 /** One line per change, in the tense an operator reads it in. */

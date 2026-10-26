@@ -1,10 +1,4 @@
-import type {
-  Axis,
-  BlindSpot,
-  Observation,
-  RunSummary,
-  Scope,
-} from '@naught/shared';
+import type { Axis, Claim, RunReport, Scope } from '@naught/shared';
 
 /**
  * Where a collector puts what it saw. Calls are buffered into Parquet row
@@ -21,8 +15,13 @@ export interface RunSink {
    * is nullable for.
    */
   expected(n: number): Promise<void>;
-  observation(o: Observation): Promise<void>;
-  blindSpot(b: BlindSpot): Promise<void>;
+
+  /**
+   * One claim, from one source, about one subject. What the collector could
+   * not see is a claim too, with `observationKind: 'not_assessable'` and a
+   * reason — never an omission (ADR 0007).
+   */
+  claim(c: Claim): Promise<void>;
 }
 
 /**
@@ -34,7 +33,12 @@ export interface Collector {
   /** "deps.osv", "deps.guac", "image.registry" */
   readonly id: string;
   readonly axis: Axis;
-  collect(scope: Scope, sink: RunSink): Promise<RunSummary>;
+  /**
+   * Bumped whenever the collector parses a source differently, so that every
+   * evidence row can say which parser produced it (`extractorVersion`).
+   */
+  readonly version: string;
+  collect(scope: Scope, sink: RunSink): Promise<RunReport>;
 }
 
 export const COLLECTOR = Symbol('naught.collector');

@@ -13,7 +13,35 @@ One kind of decaying aspect that affecting your software, and the attribute meas
 A replaceable adapter that reads one external system and writes rows: `deps.osv`, `image.registry`. An axis may have a **lightweight** collector and an **advanced** one (which is richer because a sibling tool is present). A collector holds no state between runs and must not be given a credential that can mutate your system's state.
 ### Subject
 
-The thing an axis measures, identified by Package URL: `pkg:npm/left-pad@1.3.0`. One observation row is one subject at one moment. A subject is a package *at a version*, because "is this compromised" and "has this been abandoned" are properties of a version.
+The thing an axis measures, identified by Package URL: `pkg:npm/left-pad@1.3.0`. A subject is a package *at a version*, because "is this compromised" and "has this been abandoned" are properties of a version.
+
+### Claim
+
+One statement, from one source, about one subject, at one moment. For example: "the lockfile `/repo/pnpm-lock.yaml` pins `pkg:npm/lodash@4.17.20`" (claim type `contains`, source `pnpm-lock`), or "OSV lists `GHSA-35jh-r3h4-6jhm` against `pkg:npm/lodash@4.17.20`" (claim type `advisory`, source `osv`). A collector emits claims. It does not emit verdicts.
+
+### Evidence
+
+A claim as the lake stores it: one row of `{stem}.evidence.parquet`, never edited after the run seals. Beside the claim, the row records the run that saw it, its source and the most original source behind that one, its two grades, when Naught saw it (`observedAt`), when the source made it (`sourceAssertedAt`), and when it goes stale (`staleAfter`). A package with five advisories is six evidence rows: one `contains` and five `advisory`. The columns are listed in [`../references/lake-schema.md`](../references/lake-schema.md). See [ADR 0007](../references/adr/0007-evidence-replaces-observations-and-blind-spots.md).
+
+### Observation kind
+
+The shape of the answer a claim records. There are three:
+
+| Kind | Means | Example |
+| --- | --- | --- |
+| `observed` | The source made the claim | OSV lists `GHSA-35jh-r3h4-6jhm` |
+| `absent_in_scope` | Naught asked a source that covers the subject, and the source returned nothing | OSV lists no advisory for `pkg:npm/ms@2.1.3` |
+| `not_assessable` | Naught could not ask, or could not read the answer; the row carries a reason | the OSV batch holding `pkg:npm/ms@2.1.3` timed out |
+
+`absent_in_scope` is a narrow sentence: "this source had nothing", not "there is nothing". A request that failed never produces it.
+
+### Reliability and credibility
+
+Two grades on every evidence row, taken from the NATO Admiralty code and never combined into one score. **Reliability** (A–F) grades the source *for that claim type*: OSV is `A` for `advisory`. **Credibility** (1–6) grades the claim itself: 2 for one source observing it, 3 for an absence, 6 for not assessable, and 1 only when two independent origins agree. F and 6 mean "cannot be judged", not "bad". See [ADR 0008](../references/adr/0008-two-axis-source-grading.md).
+
+### Assessment
+
+A judgement derived from evidence rows, computed when it is requested and never stored, because whether it is stale depends on the clock. For each subject in the latest run, the `known_advisories` assessment is one of `established`, `conflicting`, `stale`, `missing` or `not_assessable`, and it names the evidence ids it rests on. `GET /axes/:axis/assessments` returns them.
 
 ### Container
 
@@ -35,9 +63,9 @@ What a run was pointed at: `targets` and an optional `since`. Recorded in the ru
 
 ### Run manifest
 
-`{stem}.run.json`, written beside the Parquet files of the run. It holds the rows' external metadata: the collector's own `RunSummary`, the `Scope` the run was pointed at, the artifacts it produced, and the schema version it was written at. 
+`{stem}.run.json`, written beside the run's evidence file. It holds the rows' external metadata: the collector's own `RunSummary`, the `Scope` the run was pointed at, the targets it actually read (`scopeCompleted`), the artifacts it produced, the collector and grading versions, and the schema version it was written at.
 
-A manifest that names no version reads as version 1. 
+A manifest that names no version reads as version 1. A version 1 run rewritten by `make migrate-lake` gains a second manifest, `{stem}.v2.run.json`, which lists the files it was rewritten from in `migratedFrom` and stands for the run from then on.
 
 A run with no manifest is a run whose coverage is permanently unknown.
 
@@ -49,9 +77,9 @@ For instance: Naught found 400 dependencies in a `packages.lock` file. But Naugh
 
 ### Blind spot
 
-Something Naught could not see in that run, written as a row: `unparseable`, `rate-limited`, `unreachable-upstream`, `access-denied`, `unsupported-ecosystem`, `opaque-layer`, `vendored-binary`, `other`. 
+Something Naught could not see in that run: an evidence row whose observation kind is `not_assessable`, with one of these reasons: `unparseable`, `rate-limited`, `unreachable-upstream`, `access-denied`, `unsupported-ecosystem`, `opaque-layer`, `vendored-binary`, `other`.
 
-Blind spots live in their own `.blind.parquet` file so that no glob can union them into the list of "observed things" (TL;DR: prevent accidental miss-leading information).
+Blind spots share the evidence table with what was seen. A query cannot add them to the list of observed subjects by accident, because no module reads the evidence files directly: every reader starts from the view `evidence_seen` or the view `evidence_unseen`, and a test fails if any module other than `apps/api/src/lake/evidence-views.ts` (and `v1-rows.ts`, which reads version 1 files for the rewriter) calls `read_parquet`. Schema version 1 enforced the same separation with a second file, `.blind.parquet`; ADR 0007 records why it changed.
 
 An empty blind-spot list means: In that run, Naught's collector can collect all advisories of required subjects that need to be checked.
 
@@ -59,11 +87,11 @@ An empty blind-spot list means: In that run, Naught's collector can collect all 
 
 Three states Naught is never allowed to conflate:
 
-| State           | Means                                                                      | Rendered as                                       |
-| --------------- | -------------------------------------------------------------------------- | ------------------------------------------------- |
-| **Zero**        | It was read, and there is nothing wrong with it                            | a number, beside its coverage                     |
-| **Unknown**     | It could not be read, Naught says which part and why                       | a blind spot, and coverage below 100%             |
-| **Unavailable** | The axis cannot be computed at all, because an input it requires is absent | the axis states what is missing and what it needs |
+| State           | Means                                                                      | Stored as                                           | Rendered as                                       |
+| --------------- | -------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------- |
+| **Zero**        | It was read, and there is nothing wrong with it                            | `absent_in_scope` evidence from a covering source   | a number, beside its coverage                     |
+| **Unknown**     | It could not be read, Naught says which part and why                       | `not_assessable` evidence, with a reason            | a blind spot, and coverage below 100%             |
+| **Unavailable** | The axis cannot be computed at all, because an input it requires is absent | no evidence for the axis, and a stated missing input | the axis states what is missing and what it needs |
 
 ### Finding
 
@@ -77,7 +105,7 @@ What did not move is deliberately absent.
 
 ### Lake
 
-`runs/`. Immutable, append-only Parquet plus one manifest per run, Hive-partitioned `axis=…/date=…`. The only thing in the system that cannot be recomputed, and therefore the only thing that is backed up.
+`runs/`. Immutable, append-only evidence Parquet plus one manifest per run, Hive-partitioned `axis=…/date=…`. The only thing in the system that cannot be recomputed, and therefore the only thing that is backed up.
 
 ### Derived cache
 
@@ -91,11 +119,11 @@ It never edits a file in place.
 
 ### Schema version
 
-Which generation of the Parquet column set a run was written, stated by the run in its manifest. Adding a column does not change it. A rename or a type change does, and crossing that boundary requires an upgrade stop.
+Which generation of the Parquet column set a run was written at, stated by the run in its manifest. Adding a column does not change it. A rename or a type change does, and crossing that boundary requires an upgrade stop. The current version is **2**, the evidence table. Version 1 was one observation file and one blind spot file per run.
 
 ### Upgrade stop
 
-A release an operator must pass through in order, because the lake is retained forever and a release that changes the column set therefore ships the re-writer that migrates the lake, and refuses to be jumped over. Borrowed from GitLab's upgrade path.
+A release an operator must pass through in order, because the lake is retained forever and a release that changes the column set therefore ships the re-writer that migrates the lake, and refuses to be jumped over. Borrowed from GitLab's upgrade path. The release that introduces schema version 2 is the first stop: it ships `make migrate-lake`.
 
 ### Drifted state
 
@@ -206,16 +234,21 @@ Three containers: `api`, `web`, `redis`. One volume, holding the lake and the ca
 /var/lib/naught/
 ├── runs/                        # truth. immutable, append-only
 │   ├── axis=deps/date=2026-09-24/
-│   │   ├── deps-osv--030412-811d6f.obs.parquet      # what the run saw
-│   │   ├── deps-osv--030412-811d6f.blind.parquet    # what it could not see
+│   │   ├── deps-osv--030412-811d6f.evidence.parquet # every claim: seen, absent, not assessable
 │   │   └── deps-osv--030412-811d6f.run.json         # what it set out to see
+│   ├── axis=deps/date=2026-09-20/                   # a version 1 run, after make migrate-lake
+│   │   ├── deps-osv--101500-0a1b2c.obs.parquet      # kept; read by no reader
+│   │   ├── deps-osv--101500-0a1b2c.blind.parquet    # kept; read by no reader
+│   │   ├── deps-osv--101500-0a1b2c.run.json         # superseded by the .v2 manifest
+│   │   ├── deps-osv--101500-0a1b2c.evidence.parquet # the rewrite
+│   │   └── deps-osv--101500-0a1b2c.v2.run.json      # written only after the rewrite verified
 │   ├── axis=image/date=2026-09-24/
-│   │   └── image-registry--030507-4a91c2.obs.parquet
+│   │   └── image-registry--030507-4a91c2.evidence.parquet
 │   └── axis=deps/month=2026-08/part-0000.parquet    # compacted
 └── naught.duckdb                # cache. droppable
 ```
 
-A run file is named `{collector}--{HHMMSS}-{nonce}.{obs|blind}.parquet`. The timestamp and the nonce  prevent two runs of the same collector inside **one clock tick**, which would otherwise write the same name and `COPY TO` overwrites silently, last-write-wins on disk. The writer refuses to overwrite an existing run file rather than trusting the name to be unique.
+A run file is named `{collector}--{HHMMSS}-{nonce}.evidence.parquet`. The timestamp and the nonce  prevent two runs of the same collector inside **one clock tick**, which would otherwise write the same name and `COPY TO` overwrites silently, last-write-wins on disk. The writer refuses to overwrite an existing run file rather than trusting the name to be unique.
 
 Beside them sits the run's manifest, `{stem}.run.json`, holding the collector's own `RunSummary` and the `Scope` the run was pointed at. 
 
@@ -223,17 +256,17 @@ Rows record what was seen; they cannot record what the collector expected to see
 
 The scope is recorded so that a run can be repeated without anyone naming a target again. The interface's one action is *look again*, and it can only mean that honestly if the lake remembers what was looked at. A manifest written before the field existed carries `null`, and a run that cannot say what it read is not repeated on a guess.
 
-Observations and blind spots are separate files because they share column names. A glob that matches both unions a *could not see it* row into a list of things that were seen ( lie by omission).
+What a run saw and what it could not see are rows of one file, told apart by `observationKind`. Schema version 1 kept them in separate files, because they shared column names and a glob matching both would have added each *could not see it* row to the list of things seen. Version 2 moves that guard from the file system to the read path: `apps/api/src/lake/evidence-views.ts` is the only module that reads evidence files, every query starts from its `evidence_seen` or `evidence_unseen` view, and a test enforces this ([ADR 0007](../references/adr/0007-evidence-replaces-observations-and-blind-spots.md)).
 
-There is no `migrations/` directory. Parquet files carry their own schema; the derived cache is rebuilt. The lake nonetheless has a schema *version*, stated by each run in its manifest. Columns may be added within a version and readers union by name; renaming a column or changing its type is a new version, and reaching it requires an upgrade stop.
+There is no `migrations/` directory. Parquet files carry their own schema; the derived cache is rebuilt. The lake nonetheless has a schema *version*, stated by each run in its manifest. Columns may be added within a version and readers union by name; renaming a column or changing its type is a new version, and reaching it requires an upgrade stop. On startup the API refuses to serve a lake that holds version 1 runs without a `.v2.run.json`, or any run written at a version newer than it reads, and names the command or release that resolves it.
 
 ---
 
 ## 5. Collectors
 
-A collector is a `NestJS` module implementing one interface. It fetches, validates with `zod`, and streams normalized observations plus an explicit record of what it could not verify effectively.
+A collector is a `NestJS` module implementing one interface. It fetches, validates with `zod`, and streams claims to a sink: what the source said, and — as `not_assessable` claims with a reason — what it could not find out. It does not compute drift; drift is derived from the claims (§6).
 
-Observations stream to the sink rather than accumulating in a return value: a monorepo lock file can carry tens of thousands of entries, and the run must survive being larger than memory. 
+Claims stream to the sink rather than accumulating in a return value: a monorepo lock file can carry tens of thousands of entries, and the run must survive being larger than memory. 
 
 `expected` is nullable. A collector that does not know how much it was supposed to see must say so rather than report 100%.
 
@@ -269,11 +302,13 @@ The *declared* digest is read from whichever of three sources is present, in thi
 
 ## 6. Data model
 
-Three layers, in increasing derivation:
+Three layers, in increasing derivation. Only the first is truth:
 
-1. **Raw runs**: immutable Parquet, partitioned `axis=…/date=…`. Every collection run is stored as `received` (post-validation). This is the source of truth and the only thing that cannot be recomputed.
-2. **Entities and edges** — the graph, materialized in `naught.duckdb`. Components, versions, origins, dependencies, and what contains what. Derived from raw runs; can be dropped and rebuilt.
-3. **Drift** — per axis, per entity, over time. A number, a timestamp, and the coverage it was computed at. Derived.
+1. **Evidence**: immutable Parquet, partitioned `axis=…/date=…`, one row per claim. A claim that contradicts another is kept, not resolved at write time; a claim that could not be assessed is kept as `not_assessable`. This is the source of truth and the only thing that cannot be recomputed.
+2. **Derived views**: drift, findings and the delta, computed from evidence by the views in `apps/api/src/lake/evidence-views.ts`. `subject_drift` reproduces the version 1 per-subject row, so `drift` on the `deps` axis is still the count of advisories OSV lists against a version. `rebuild-cache` materializes `evidence` and `subject_drift` into `naught.duckdb`; both can be dropped and rebuilt.
+3. **Assessments**: per subject, as of a moment — `established`, `conflicting`, `stale`, `missing` or `not_assessable` — with the evidence ids each rests on and a `ruleVersion`. Computed when requested and never cached, because staleness depends on the clock.
+
+Changing how drift or an assessment is computed changes a view or a rule version. It never rewrites evidence, so the change applies to every run already stored.
 
 The interesting query is never "what is true now" alone. It is always "what is true now *versus* what was true at time T". The partition layout exists to make that question cheap: a query bounded by date touches only the files in those partitions.
 
@@ -435,7 +470,7 @@ Stated once: **compaction changes how many files sit under an axis, and never th
 
 ### Settled, do not reopen without an ADR
 
-Unit of the graph (package version, purl) · retention (indefinite, compacted) · storage engine (Parquet + DuckDB) · blind spot handling (coverage on every verdict, no refusal threshold) · first axes (dependency rot, base image tag drift) · always-on service · `declared` for base images (three sources in order, then *unavailable*) · schema evolution (additive within a version, upgrade stops across one) · compaction (row-preserving, verified, mark before delete).
+Unit of the graph (package version, purl) · retention (indefinite, compacted) · storage engine (Parquet + DuckDB) · blind spot handling (coverage on every verdict, no refusal threshold; stored as `not_assessable` evidence, read only through views) · evidence as the unit of the lake (one row per claim, two-axis grading, ADR 0007 and 0008) · first axes (dependency rot, base image tag drift) · always-on service · `declared` for base images (three sources in order, then *unavailable*) · schema evolution (additive within a version, upgrade stops across one) · compaction (row-preserving, verified, mark before delete).
 
 ---
 
@@ -489,7 +524,7 @@ Unit of the graph (package version, purl) · retention (indefinite, compacted) �
 │        │                            (đếm, throttle 250ms)                   │
 │        │                                     │                              │
 │        │                             ParquetRunSink                         │
-│        │                          seal() ─┬─ .obs.parquet                   │
+│        │                          seal() ─┬─ .evidence.parquet              │
 │        ▼                                  └─ .run.json  (summary + scope)   │
 │    glob Parquet ◄─────────────────────────┘   discard()  nếu run hỏng       │
 └──────────┬──────────────────────────────────────────────┬───────────────────┘
@@ -500,9 +535,9 @@ Unit of the graph (package version, purl) · retention (indefinite, compacted) �
 │    --- True state ---        │              │  Giữ trạng thái điều phối  │
 │                              │              │  của lượt chạy,            │    
 │  runs/axis=deps/date=…/      │              │  không persist             │
-│    *.obs.parquet   bất biến  │              │  mất = chạy lại là xong    │
-│    *.blind.parquet append    │              └────────────────────────────┘
-│    *.run.json      only      │
+│    *.evidence.parquet        │              │  mất = chạy lại là xong    │
+│    *.run.json                │              └────────────────────────────┘
+│    bất biến, append only     │
 │  ── disposable cache ──      │      Run đang chạy không được ingest vào lake.
 │       naught.duckdb          │      Lake chỉ nhận đúng 1 manifest khi seal,
 └──────────────────────────────┘      và không nhận gì khi thất bại.

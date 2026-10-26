@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
   Axis,
-  BlindSpot,
+  NotAssessableReason,
   type AxisAvailability,
   type BlindSpotRow,
   type DeltaView,
@@ -36,7 +36,7 @@ export class FindingsService {
   async axes(): Promise<AxisAvailability[]> {
     const checks = Axis.options.map(async (axis) => ({
       axis,
-      hasData: await this.lake.hasFiles(axis, 'obs'),
+      hasData: await this.lake.hasFiles(axis),
     }));
     return Promise.all(checks);
   }
@@ -57,12 +57,16 @@ export class FindingsService {
    * figure reconstructed from the very rows whose completeness is in question.
    */
   async latestRun(axis: Axis): Promise<LatestRun | null> {
-    if (!(await this.lake.hasFiles(axis, 'obs'))) return null;
-    const observedAt = await this.scalar(latestObservedAtSql(this.obs(axis)));
-    const openFindings = Number(
-      await this.scalar(openFindingsSql(this.obs(axis))),
+    if (!(await this.lake.hasFiles(axis))) return null;
+    const observedAt = await this.scalar(
+      latestObservedAtSql(this.evidence(axis)),
     );
-    const counted = Number(await this.scalar(observedCountSql(this.obs(axis))));
+    const openFindings = Number(
+      await this.scalar(openFindingsSql(this.evidence(axis))),
+    );
+    const counted = Number(
+      await this.scalar(observedCountSql(this.evidence(axis))),
+    );
     const [manifest] = await readManifests(this.lake.runsDir, axis);
     return {
       axis,
@@ -88,12 +92,8 @@ export class FindingsService {
   }
 
   async blindSpots(axis: Axis): Promise<BlindSpotRow[]> {
-    if (!(await this.lake.hasFiles(axis, 'blind'))) return [];
-    const db = await this.lake.query();
-    const result = await db.runAndReadAll(
-      blindSpotsSql(this.lake.globFor(axis, 'blind')),
-    );
-    return result.getRows().map(([subject, container, reason, note]) => ({
+    const rows = await this.read(axis, blindSpotsSql);
+    return rows.map(([subject, container, reason, note]) => ({
       subject: String(subject),
       container: nullableString(container),
       reason: toBlindSpotReason(reason),
@@ -103,11 +103,11 @@ export class FindingsService {
 
   /** §9's fourth question, delegated to the module that already answers it. */
   async delta(axis: Axis): Promise<DeltaView> {
-    if (!(await this.lake.hasFiles(axis, 'obs'))) {
+    if (!(await this.lake.hasFiles(axis))) {
       return { runs: 0, previousAt: null, openFindings: 0, changes: [] };
     }
     const db = await this.lake.query();
-    const delta = await deltaSinceLastRun(db, this.obs(axis));
+    const delta = await deltaSinceLastRun(db, this.evidence(axis));
     // DuckDB hands back its own timestamp rendering. Every timestamp that
     // leaves this service is ISO, so the interface never has to know which
     // engine produced which field.
@@ -117,17 +117,17 @@ export class FindingsService {
     };
   }
 
-  private obs(axis: Axis): string {
-    return this.lake.globFor(axis, 'obs');
+  private evidence(axis: Axis): string {
+    return this.lake.globFor(axis);
   }
 
   private async read(
     axis: Axis,
     sql: (glob: string) => string,
   ): Promise<readonly unknown[][]> {
-    if (!(await this.lake.hasFiles(axis, 'obs'))) return [];
+    if (!(await this.lake.hasFiles(axis))) return [];
     const db = await this.lake.query();
-    const result = await db.runAndReadAll(sql(this.obs(axis)));
+    const result = await db.runAndReadAll(sql(this.evidence(axis)));
     return result.getRows();
   }
 
@@ -152,10 +152,10 @@ function isoOf(value: unknown): string {
 }
 
 /**
- * Advisory identifiers live in the observation's `detail` JSON. A row whose
- * detail is missing or malformed yields an empty list; the drift count beside
- * it still stands, because the finding is real whether or not its identifiers
- * survived the round trip.
+ * Advisory identifiers arrive as a JSON array rendered by `subject_drift`. A
+ * malformed value yields an empty list; the drift count beside it still
+ * stands, because the finding is real whether or not its identifiers survived
+ * the round trip.
  */
 function parseAdvisories(value: unknown): string[] {
   if (value === null || value === undefined) return [];
@@ -174,6 +174,6 @@ function parseAdvisories(value: unknown): string[] {
  * dropping the row: an unrecognised blind spot is still a blind spot.
  */
 function toBlindSpotReason(value: unknown): BlindSpotRow['reason'] {
-  const parsed = BlindSpot.shape.reason.safeParse(value);
+  const parsed = NotAssessableReason.safeParse(value);
   return parsed.success ? parsed.data : 'other';
 }

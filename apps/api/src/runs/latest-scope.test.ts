@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { CollectionRun, Scope } from '@naught/shared';
+import { CollectionRun, type Scope } from '@naught/shared';
 import { latestScope } from './latest-scope.js';
 import { FakeManifestStore } from './run-fakes.js';
 
+/** Parsed, so fields added to the manifest since arrive at their defaults. */
 function run(startedAt: string, scope: Scope | null): CollectionRun {
-  return {
+  return CollectionRun.parse({
     runId: '00000000-0000-4000-8000-000000000000',
     collectorId: 'deps.osv',
     axis: 'deps',
@@ -14,7 +15,7 @@ function run(startedAt: string, scope: Scope | null): CollectionRun {
     summary: { observed: 1, expected: 1, coverage: 1 },
     artifacts: [],
     scope,
-  };
+  });
 }
 
 const HERE: Scope = { targets: ['/repo/pnpm-lock.yaml'], since: null };

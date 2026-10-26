@@ -7,7 +7,50 @@ All notable changes to Naught are recorded here, following
 Entries are written for an operator: what changed, and why it mattered.
 
 ## [Unreleased]
+
+> **This release is an upgrade stop.** It changes the lake to schema version 2.
+> Before starting the API on an existing lake, run `make migrate-lake` (in the
+> API container: `node dist/lake/migrate-lake.js`). The command rewrites every
+> schema version 1 run beside the original, verifies each rewrite against the
+> original rows, and deletes nothing. Until it has run, the API exits at startup
+> with a message naming the command. A partition directory the API cannot write
+> to is reported and skipped; fix its permissions and run the command again.
+
 ### Added
+
+- **Every claim in the lake now names its source and how far it is trusted.**
+  A schema version 1 run stored `pkg:npm/lodash@4.17.20, drift 5`: five OSV
+  claims merged into one number, with no record of when OSV made each claim
+  or how much weight it can bear. A run now writes one evidence row per claim
+  to `{stem}.evidence.parquet`. Each row records its source (`osv`), the
+  original database behind it (`ghsa` for a `GHSA-` id), the source's
+  reliability for that kind of claim (A–F), the claim's credibility (1–6),
+  OSV's own `modified` timestamp, and when the claim goes stale. A package
+  OSV lists nothing for is recorded as *absent from a source that covers it*,
+  which is a narrower statement than "clean", and a package OSV did not answer
+  for is recorded as *not assessable*, with the reason. Drift, findings and
+  the delta are derived from these rows, so the interface shows exactly what
+  it showed before.
+  [ADR 0007](docs/references/adr/0007-evidence-replaces-observations-and-blind-spots.md),
+  [ADR 0008](docs/references/adr/0008-two-axis-source-grading.md),
+  [column reference](docs/references/lake-schema.md)
+- **`GET /axes/:axis/assessments`** returns, for every subject in the latest
+  run, how settled the answer is: `established`, `stale` (older than 24 hours),
+  `conflicting`, `missing` or `not_assessable`, with the ids of the evidence
+  rows it rests on and its best grades. A package seen only as not assessable
+  is reported as `not_assessable`, never as clean. Assessments are computed per
+  request and never cached, because staleness depends on the time of asking.
+- **`GET /axes/:axis/evidence?subject=<purl>`** returns every evidence row
+  about one subject across all runs, newest first. A request without
+  `subject` is refused with `400`.
+- **`make migrate-lake`**, the rewriter for this upgrade stop. It can be run
+  repeatedly: a run already rewritten is skipped. Run `make migrate-lake` again
+  after fixing whatever caused a refusal.
+- **Run manifests record what the run actually read.** `scopeCompleted` lists the
+  targets the collector could open, and a run that could not open one of
+  them seals as `partial` instead of `complete`. Manifests also record
+  `schemaVersion`, `collectorVersion` and `gradingVersion`. A manifest written
+  before these fields existed reads as schema version 1.
 
 - **A definition of coverage that stands on its own.** Coverage appears on every
   verdict Naught renders, and an operator reading *"nothing found, at 82%
@@ -94,6 +137,19 @@ Entries are written for an operator: what changed, and why it mattered.
 
 ### Changed
 
+- **The API refuses to serve a lake it cannot read correctly.** At startup it
+  exits with status 1 when the lake holds schema version 1 runs that have not
+  been rewritten, or any run written at a schema version newer than this build
+  reads, and prints which run, which version, and what to do. Before this, the
+  API would have shown the history it could not read as empty.
+- **The latest run is the newest run, whatever it saw.** Runs are now identified
+  by `runId` instead of by their `observedAt` timestamp. A run whose every
+  request failed is the latest run and shows its blind spots, instead of being
+  passed over in favour of the last run that saw something.
+- **`GET /health` counts runs, not files.** `runs` is now the number of
+  evidence files, one per run. It used to count every Parquet file, which was
+  up to two per run.
+
 - **Panels state their conclusion before their evidence.** The delta strip used
   to read *"Nothing changed since 2026-09-24 17:05:50 UTC. 0 findings still
   open."* — accurate, and it asked the operator to combine a timestamp and a
@@ -129,6 +185,12 @@ Entries are written for an operator: what changed, and why it mattered.
   and the queue worker — each have both in hand already.
 
 ### Fixed
+
+- **A short answer from OSV no longer counts as clean.** When OSV's batch
+  response held fewer results than queries, `deps.osv` read each missing result
+  as "no advisories". The whole batch is now recorded as not assessable
+  (`unreachable-upstream`), which lowers coverage instead of reporting packages
+  nobody answered for as clean. OSV responses are now validated before use.
 
 - **An unwritable lake took the API down with it.** `createWriteStream` reports
   a failed open as an asynchronous `'error'` event, and an unhandled one of
