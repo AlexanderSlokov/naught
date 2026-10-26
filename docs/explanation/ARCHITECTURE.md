@@ -378,7 +378,7 @@ And when a week of running produces no notifications on a quiet week, and exactl
 
 Of the six questions this section opened with, three are answered below, two are deferred on purpose, and one is still open.
 
-Each answer is the decision of record. It is owed an ADR under `../adr`, and the reasoning is written here first so that none of it is lost while `docs/` is reorganized into Diátaxis. Reversing one of these means writing the ADR that says why — not editing the paragraph.
+Each answer is the decision of record. It is owed an ADR under `../references/adr`, and the reasoning is written here first so that none of it is lost while `docs/` is reorganized into Diátaxis. Reversing one of these means writing the ADR that says why — not editing the paragraph.
 
 ### Answered
 

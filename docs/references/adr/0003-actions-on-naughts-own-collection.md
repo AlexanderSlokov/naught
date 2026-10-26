@@ -5,11 +5,11 @@
 
 ## Context
 
-`../explanation/ARCHITECTURE.md` §2 states the first design constraint as **read-only
+`../../explanation/ARCHITECTURE.md` §2 states the first design constraint as **read-only
 outward**: every credential Naught holds for an external system is read-only,
 and write access is a bug rather than a feature.
 
-`docs/explanation/why-a-foundry-shaped-ui.md` then read that constraint one step
+`../../explanation/why-a-foundry-shaped-ui.md` then read that constraint one step
 wider than it was written:
 
 > Not borrowed: actions. A Workshop application exists to *change* the objects
@@ -65,8 +65,8 @@ Three consequences of that line shape the implementation:
   the command that fixes it, rather than guessing a scope.
 - Redis moves from provisioned-but-unused to load-bearing. Losing it costs at
   most a run that has to be asked for again — the lake is untouched, which is
-  what `docker-compose.yml` already claimed of that volume.
-- `docs/explanation/why-a-foundry-shaped-ui.md` is amended to cite this ADR
+  what `../../../docker-compose.yml` already claimed of that volume.
+- `../../explanation/why-a-foundry-shaped-ui.md` is amended to cite this ADR
   rather than to assert that no write path exists.
 - This does not reopen remediation. The distinction that permits a collection
   run — that it only reads the systems it touches — is exactly the distinction

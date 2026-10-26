@@ -25,7 +25,7 @@ Entries are written for an operator: what changed, and why it mattered.
   same reason. Columns added without a rename or a type change require nothing of
   anyone. When a release is a stop, these notes will say so, because an operator
   cannot discover that from the artifact they are installing.
-  [ADR 0005](./docs/adr/0005-parquet-schema-evolution-and-upgrade-stops.md)
+  [ADR 0005](docs/references/adr/0005-parquet-schema-evolution-and-upgrade-stops.md)
 - **The image axis will say when it cannot answer, and what would fix it.** Base
   image drift needs the digest a tag resolved to at build time, which an image is
   under no obligation to carry. It is read from base-image annotations in the
@@ -34,7 +34,7 @@ Entries are written for an operator: what changed, and why it mattered.
   axis that names all three, rather than a drift of zero: resolving the tag twice
   and finding the two answers agree would report every image in the estate as
   current at the moment the axis knows least.
-  [ADR 0004](./docs/adr/0004-where-declared-comes-from-for-base-images.md)
+  [ADR 0004](docs/references/adr/0004-where-declared-comes-from-for-base-images.md)
 - **Compaction will prove itself before deleting anything.** Merging a day's runs
   into a month partition writes a new file, records which runs it came from,
   verifies the rows by per-source count and checksum, and only then marks the
@@ -42,7 +42,7 @@ Entries are written for an operator: what changed, and why it mattered.
   already in flight to finish. No file is ever opened for writing, so backup
   stays `cp -r` and a run's evidence stays the run's evidence. The lifecycle is
   Grafana Mimir's, whose block storage holds the same shape of data.
-  [ADR 0006](./docs/adr/0006-compaction-preserves-rows.md)
+  [ADR 0006](docs/references/adr/0006-compaction-preserves-rows.md)
 
 - **A collection can be started from the interface.** The header carries one
   control, `Collect`, which queues a run and reports it as it happens: queued,
@@ -53,7 +53,7 @@ Entries are written for an operator: what changed, and why it mattered.
   terminal. A second click while a run is in flight is refused, by the queue
   and by the button both. The reasoning for an action existing at all in a
   read-only tool is in
-  [ADR 0003](./docs/adr/0003-actions-on-naughts-own-collection.md): a run reads
+  [ADR 0003](docs/references/adr/0003-actions-on-naughts-own-collection.md): a run reads
   external systems and writes to none of them.
 - **`POST /runs` and `GET /runs/current`**, beside a WebSocket at
   `/runs/stream`. The API is no longer GET-only. It accepts cross-origin

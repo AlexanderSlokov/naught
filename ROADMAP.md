@@ -67,7 +67,7 @@ of a subject, and blind spots of a kind `deps` never produces (opaque layers).
 ### Say plainly when an axis cannot be computed at all
 
 The image axis needs a build-time digest, and an image is under no obligation to
-carry one. [ADR 0004](./docs/adr/0004-where-declared-comes-from-for-base-images.md)
+carry one. [ADR 0004](docs/references/adr/0004-where-declared-comes-from-for-base-images.md)
 decides where that digest is read from — base-image annotations, a provenance
 record, an SBOM, in that order — and what happens when an image carries none of
 the three: the axis reports itself unavailable and names every source that would
@@ -87,7 +87,7 @@ response, not only in the interface.
 
 Runs are kept forever, so the lake outlives the code that wrote it, and a file
 that cannot say which generation of the column set it belongs to has to be
-guessed at. [ADR 0005](./docs/adr/0005-parquet-schema-evolution-and-upgrade-stops.md)
+guessed at. [ADR 0005](docs/references/adr/0005-parquet-schema-evolution-and-upgrade-stops.md)
 settles the rule: additions are free within a version, anything else is a new
 version reached through an upgrade stop, and the version is stated by the run in
 its manifest.

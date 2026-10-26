@@ -41,7 +41,7 @@ the objects it displays, and almost all of that vocabulary has no analogue here.
 The screen carries exactly one action, and it does not touch an object at all —
 it asks Naught to collect again. A run reads external systems and writes to none
 of them, which is why it does not breach the read-only rule in ARCHITECTURE §2;
-[ADR 0003](../adr/0003-actions-on-naughts-own-collection.md) draws that line and
+[ADR 0003](../references/adr/0003-actions-on-naughts-own-collection.md) draws that line and
 explains where it stops.
 
 What remains not borrowed is everything past that point. No observation can be

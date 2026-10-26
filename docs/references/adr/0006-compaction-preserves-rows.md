@@ -5,7 +5,7 @@
 
 ## Context
 
-Two statements in `../explanation/ARCHITECTURE.md` contradict each other on their face. §4:
+Two statements in `../../explanation/ARCHITECTURE.md` contradict each other on their face. §4:
 `runs/` is immutable and append-only. §6: a monthly compactor merges the day's
 files into month partitions, so the file count stays flat and query planning
 stays fast.

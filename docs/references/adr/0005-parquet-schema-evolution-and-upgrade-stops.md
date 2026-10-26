@@ -5,7 +5,7 @@
 
 ## Context
 
-Raw runs are kept forever (`../explanation/ARCHITECTURE.md` §6). Two consequences follow that
+Raw runs are kept forever (`../../explanation/ARCHITECTURE.md` §6). Two consequences follow that
 no other part of the design has to live with:
 
 - Files written years apart must answer one `SELECT`. DuckDB unions a glob by
@@ -14,7 +14,7 @@ no other part of the design has to live with:
 - The lake outlives the code that wrote it. The oldest file in `runs/` was
   written by a build nobody is running any more, and it is still evidence.
 
-`apps/api/src/lake/schema.ts` already declares the column set rather than
+`../../../apps/api/src/lake/schema.ts` already declares the column set rather than
 inferring it, and already says additions are allowed and type changes are not.
 What §10 carried as open was the rest: what happens when a type change is
 nonetheless needed, and where the version of a file's schema is written down.
@@ -63,9 +63,9 @@ to finish at each, rather than jumping from anywhere to anywhere
 - Startup gains a lake check beside the existing cache check, and the two are
   handled differently on purpose: a stale `naught.duckdb` is rebuilt without
   asking anyone, while a lake the code cannot read stops the API.
-  `../explanation/ARCHITECTURE.md` §8 records this.
+  `../../explanation/ARCHITECTURE.md` §8 records this.
 - Release notes acquire a job. A release that is an upgrade stop must say so in
-  `CHANGELOG.md`, because an operator cannot discover the requirement from the
+  `../../../CHANGELOG.md`, because an operator cannot discover the requirement from the
   artifact they are installing.
 - The cost is real and is accepted: an operator who has skipped several releases
   installs them in order. One extra command, against the alternative of a

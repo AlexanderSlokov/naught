@@ -5,7 +5,7 @@
 
 ## Context
 
-`../explanation/ARCHITECTURE.md` closes with a list of settled questions that are not to be
+`../../explanation/ARCHITECTURE.md` closes with a list of settled questions that are not to be
 reopened without an ADR. That instruction needs somewhere to point.
 
 ## Decision
@@ -17,5 +17,5 @@ was believed at the time.
 
 ## Consequences
 
-The settled list in `../explanation/ARCHITECTURE.md` §10 is enforceable: reversing any of it
+The settled list in `../../explanation/ARCHITECTURE.md` §10 is enforceable: reversing any of it
 means writing the document that explains why.

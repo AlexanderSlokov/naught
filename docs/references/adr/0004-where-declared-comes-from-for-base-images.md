@@ -8,7 +8,7 @@
 The `image` axis compares the digest a base image tag resolved to *when the
 image was built* against the digest that same tag resolves to now. The second
 number is free: resolve the tag against the registry. The first number is the
-problem, and `../explanation/ARCHITECTURE.md` §10 has carried it as an open question since the
+problem, and `../../explanation/ARCHITECTURE.md` §10 has carried it as an open question since the
 axis was designed.
 
 Nothing in a running image is obliged to remember what its base tag pointed at.
@@ -51,7 +51,7 @@ render empty:
 > a provenance record from the build, or an SBOM naming the base image.
 
 *Unavailable* is a third state beside zero and unknown, defined in
-`../explanation/ARCHITECTURE.md` §12 and reported as itself. "The tag has not moved" and
+`../../explanation/ARCHITECTURE.md` §12 and reported as itself. "The tag has not moved" and
 "nobody wrote down where the tag pointed" are the two facts this project exists
 to keep apart.
 

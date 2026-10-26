@@ -56,7 +56,7 @@ boundary.
 *Files:* `apps/api/src/collectors/image-registry.collector.ts` (new),
 `apps/api/src/collectors/collector.registry.ts`, ARCHITECTURE §5
 *Depends on:* nothing outstanding
-Decided in [ADR 0004](./docs/adr/0004-where-declared-comes-from-for-base-images.md):
+Decided in [ADR 0004](docs/references/adr/0004-where-declared-comes-from-for-base-images.md):
 `declared` is read from base-image annotations in the image config, then a
 provenance record, then an SBOM, and an image carrying none of the three makes
 the axis unavailable rather than clean. None of that exists — the axis has no
@@ -88,7 +88,7 @@ missing.
 *Files:* `packages/shared/src/run.ts`, `apps/api/src/lake/parquet-run-sink.ts`,
 `apps/api/src/lake/run-manifest.ts`, `apps/api/src/main.ts`, ARCHITECTURE §4, §8
 *Depends on:* nothing outstanding
-[ADR 0005](./docs/adr/0005-parquet-schema-evolution-and-upgrade-stops.md) makes
+[ADR 0005](docs/references/adr/0005-parquet-schema-evolution-and-upgrade-stops.md) makes
 the run responsible for stating its schema version, and nothing does. Every run
 sealed before the field exists is a run whose generation has to be assumed,
 which is the same shape of debt as X2 and gets worse with every collection.
