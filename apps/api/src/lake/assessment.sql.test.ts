@@ -66,6 +66,7 @@ describe('assessments (assess-v0)', () => {
     ]);
     expect(row?.state).toBe('conflicting');
     expect(row?.conflictingIds).toHaveLength(1);
+    expect(row?.sources).toEqual(['nvd', 'osv']);
   });
 
   /** ADR 0008: confirmed means two independent origins, not two sources. */

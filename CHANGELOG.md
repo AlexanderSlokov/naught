@@ -9,12 +9,13 @@ Entries are written for an operator: what changed, and why it mattered.
 ## [Unreleased]
 
 > **This release is an upgrade stop.** It changes the lake to schema version 2.
-> Before starting the API on an existing lake, run `make migrate-lake` (in the
-> API container: `node dist/lake/migrate-lake.js`). The command rewrites every
-> schema version 1 run beside the original, verifies each rewrite against the
-> original rows, and deletes nothing. Until it has run, the API exits at startup
-> with a message naming the command. A partition directory the API cannot write
-> to is reported and skipped; fix its permissions and run the command again.
+> Before starting the API on an existing lake, run `make migrate-lake`, or under
+> compose `docker compose run --rm api node apps/api/dist/lake/migrate-lake.js`.
+> The command rewrites every schema version 1 run beside the original, verifies
+> each rewrite against the original rows, and deletes nothing. Until it has run,
+> the API exits at startup with a message naming the command. A run in a
+> partition directory the command cannot write to is reported and left as it
+> was; fix the directory's permissions and run the command again.
 
 ### Added
 
@@ -34,12 +35,25 @@ Entries are written for an operator: what changed, and why it mattered.
   [ADR 0007](docs/references/adr/0007-evidence-replaces-observations-and-blind-spots.md),
   [ADR 0008](docs/references/adr/0008-two-axis-source-grading.md),
   [column reference](docs/references/lake-schema.md)
+- **Each subject shows what is believed about it, how firmly, and on which
+  evidence.** The subject table has a *Basis* column: the grade pair, such as
+  `A2`, while the answer is current, and the state in its place — `stale`,
+  `conflicting` — when it is not, so a month-old answer is visible without
+  selecting it. The detail panel opens with a sentence no wider than the
+  evidence supports — *"OSV.dev lists no advisory against this version"*, not
+  *"clean"* — and states the confidence on a separate line: the grade in
+  words, how long before the page loaded the source was asked, and, for an
+  absence, that it covers what the source has indexed and not what exists.
+  Below the properties, the panel lists every evidence row from the latest run
+  about the subject, each naming its source and original source
+  (`osv → ghsa`), its grade, and when the source made the claim.
 - **`GET /axes/:axis/assessments`** returns, for every subject in the latest
   run, how settled the answer is: `established`, `stale` (older than 24 hours),
   `conflicting`, `missing` or `not_assessable`, with the ids of the evidence
   rows it rests on and its best grades. A package seen only as not assessable
-  is reported as `not_assessable`, never as clean. Assessments are computed per
-  request and never cached, because staleness depends on the time of asking.
+  is reported as `not_assessable`, never as clean. Each assessment lists the
+  sources asked (`sources`). Assessments are computed per request and never
+  cached, because staleness depends on the time of asking.
 - **`GET /axes/:axis/evidence?subject=<purl>`** returns every evidence row
   about one subject across all runs, newest first. A request without
   `subject` is refused with `400`.

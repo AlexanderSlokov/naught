@@ -262,3 +262,48 @@ body {
 .naught-run-progress {
   width: 120px;
 }
+
+/* The Basis column: the grade is quiet when the answer is settled, and the
+   state replaces it when it is not. */
+.naught-basis {
+  color: var(--naught-muted);
+}
+
+.naught-basis--attention {
+  color: var(--naught-warning);
+}
+
+.naught-table tbody tr[aria-selected='true'] .naught-basis,
+.naught-table tbody tr[aria-selected='true'] .naught-basis--attention {
+  color: inherit;
+}
+
+/* Evidence in the dossier: one claim per item, its provenance beneath. */
+.naught-evidence-list {
+  list-style: none;
+  margin: 0 0 var(--naught-gap-2);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--naught-gap-2);
+}
+
+.naught-evidence-claim {
+  display: flex;
+  align-items: center;
+  gap: var(--naught-gap-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.naught-evidence-meta {
+  color: var(--naught-muted);
+  font-size: 11px;
+  margin-top: 2px;
+  padding-left: 2px;
+}
+
+/* The panel's sections are separated by the label's top margin. */
+.naught-panel .naught-label:not(:first-child) {
+  margin-top: var(--naught-gap-4);
+}

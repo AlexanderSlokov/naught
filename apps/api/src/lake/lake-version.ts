@@ -33,7 +33,8 @@ async function unmigrated(runsDir: string): Promise<string | null> {
     `the lake at ${runsDir} holds ${pending.length} schema version 1 run(s) ` +
     `not yet rewritten, e.g. ${join(first.dir, first.stem)}. This build reads ` +
     `schema version ${LAKE_SCHEMA_VERSION} and is an upgrade stop: run ` +
-    '`make migrate-lake` (in a container: `node dist/lake/migrate-lake.js`), ' +
+    '`make migrate-lake` (under compose: `docker compose run --rm api node ' +
+    'apps/api/dist/lake/migrate-lake.js`), ' +
     'then start again. Version 1 files are kept.'
   );
 }

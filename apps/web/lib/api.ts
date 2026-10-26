@@ -1,13 +1,17 @@
 import {
+  AssessmentRows,
   AxisAvailabilities,
+  EvidenceRows,
   BlindSpotRows,
   DeltaView,
   LatestRun,
   ProjectRefs,
   RunTicket,
   SubjectRows,
+  type AssessmentRow,
   type Axis,
   type AxisAvailability,
+  type Evidence,
   type BlindSpotRow,
   type ProjectRef,
   type SubjectRow,
@@ -78,6 +82,30 @@ export async function fetchBlindSpots(axis: Axis): Promise<BlindSpotRow[]> {
 
 export async function fetchDelta(axis: Axis): Promise<DeltaView> {
   return DeltaView.parse(await get(`/axes/${axis}/delta`));
+}
+
+/** One assessment per subject in the latest run, judged as of this request. */
+export async function fetchAssessments(axis: Axis): Promise<AssessmentRow[]> {
+  return AssessmentRows.parse(await get(`/axes/${axis}/assessments`));
+}
+
+/**
+ * Every evidence row about one subject. Called from the browser when a row is
+ * selected, so it goes to the address the browser has — `PUBLIC_BASE`.
+ *
+ * @example
+ * const rows = await fetchEvidence('deps', 'pkg:npm/lodash@4.17.20', signal);
+ */
+export async function fetchEvidence(
+  axis: Axis,
+  subject: string,
+  signal: AbortSignal,
+): Promise<Evidence[]> {
+  const query = new URLSearchParams({ subject });
+  const url = `${PUBLIC_BASE}/axes/${axis}/evidence?${query.toString()}`;
+  const res = await fetch(url, { cache: 'no-store', signal });
+  if (!res.ok) throw new Error(`GET ${url} responded ${res.status}`);
+  return EvidenceRows.parse(await res.json());
 }
 
 /**

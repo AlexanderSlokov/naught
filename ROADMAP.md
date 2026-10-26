@@ -59,11 +59,34 @@ of a subject, and blind spots of a kind `deps` never produces (opaque layers).
 |---|---|
 | Record the schema version every run is written at | Done |
 | Keep every claim as source-attributed evidence | Done |
+| **Show the evidence behind each subject's answer** | In progress |
 | Observe base image tags and digests; detect a moved tag | Not started |
 | Say plainly when an axis cannot be computed at all | Not started |
 | Run collection on a schedule rather than by hand | Not started |
 | Trigger a collection from the interface | Done |
 | Notify once, with coverage, when something crosses a threshold (§7) | Not started |
+
+### Show the evidence behind each subject's answer
+
+Schema version 2 stores, for every subject, which source said what, at which
+grade, and when the answer goes stale. The interface still shows only the
+version 1 projection: a drift number and a list of advisory ids. An operator
+looking at `pkg:npm/ms@2.1.3, drift 0` cannot tell that the 0 means "OSV listed
+no advisory at 16:17 UTC", that the answer rests on one source graded A3, or
+that it expires the next day.
+
+The subject table gains the grade and state of each subject's assessment. The
+detail panel states its conclusion in the narrow form the evidence supports,
+states the confidence in it on a separate line, and then lists the evidence rows
+it rests on, with their source, original source, grades and timestamps.
+
+**Done when** selecting a subject in a browser at `:3000` shows its assessment
+as a sentence, its grades, and every evidence row about it from the latest run;
+a subject whose assessment is stale or conflicting is marked in the table
+without being selected; a lake whose answers are all stale is not presented as
+settled by the header or the delta strip; and the screen stays within the
+density budget in
+[`palantir-application-design.md`](docs/references/palantir-application-design.md).
 
 ### Say plainly when an axis cannot be computed at all
 

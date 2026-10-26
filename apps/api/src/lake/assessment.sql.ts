@@ -34,6 +34,7 @@ export function assessmentsSql(glob: string, asOf: string): string {
       'subject': subject, 'container': container, 'factor': 'known_advisories',
       'state': state, 'value': {'listed': listed, 'advisories': advisories},
       'supportingIds': supportingIds, 'conflictingIds': conflictingIds,
+      'sources': sources,
       'bestReliability': bestReliability, 'bestCredibility': bestCredibility,
       'observedAt': ${isoSql('observedAt')}, 'staleAfter': ${isoSql('staleAfter')},
       'freshnessSeconds': CAST(epoch(${at}) - epoch(observedAt) AS BIGINT),
@@ -67,6 +68,8 @@ function latestRowsViews(): string {
         ${ids(`observationKind = 'not_assessable'`)} AS unseenIds,
         coalesce(list_sort(list(claimValue->>'vuln')
           FILTER (WHERE claimType = 'advisory' AND observationKind = 'observed')), []::VARCHAR[]) AS advisories,
+        coalesce(list_sort(list(DISTINCT sourceId)
+          FILTER (WHERE claimType = 'advisory')), []::VARCHAR[]) AS sources,
         min(reliability) FILTER (WHERE claimType = 'advisory' AND ${seen}) AS bestReliability,
         min(credibility) FILTER (WHERE claimType = 'advisory' AND ${seen}) AS credibility,
         min(staleAfter) FILTER (WHERE claimType = 'advisory' AND ${seen}) AS staleAfter,
@@ -79,7 +82,7 @@ function latestRowsViews(): string {
 /** Applies `assess-v0` to each subject. */
 function judgedSelect(at: string): string {
   return `
-    SELECT p.subject, p.container, p.listed, p.advisories, p.bestReliability,
+    SELECT p.subject, p.container, p.listed, p.advisories, p.sources, p.bestReliability,
       p.observedAt, p.staleAfter,
       CASE
         WHEN p.listed > 0 AND p.absent > 0 THEN 'conflicting'

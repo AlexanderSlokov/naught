@@ -2,7 +2,12 @@ import { z } from 'zod';
 import { Axis } from './axis.js';
 import { RunSummary } from './run.js';
 import { Evidence } from './evidence.js';
-import { Credibility, NotAssessableReason, Reliability } from './vocabulary.js';
+import {
+  Credibility,
+  NotAssessableReason,
+  Reliability,
+  SourceId,
+} from './vocabulary.js';
 
 /**
  * What the read API returns, declared once and imported by both sides.
@@ -135,6 +140,8 @@ export const AssessmentRow = z.object({
   supportingIds: z.array(z.string()),
   /** Rows that contradict `supportingIds`. Non-empty only when `conflicting`. */
   conflictingIds: z.array(z.string()),
+  /** Every source asked about this factor, answered or not, sorted. */
+  sources: z.array(SourceId),
   /** Null when nothing was seen: an unseen claim has no grade worth showing. */
   bestReliability: Reliability.nullable(),
   bestCredibility: Credibility.nullable(),

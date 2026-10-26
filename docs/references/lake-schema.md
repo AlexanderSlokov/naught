@@ -149,8 +149,10 @@ Every query in the API starts from one of these.
 
 ## Assessment states, `assess-v0`
 
-Returned by `GET /axes/:axis/assessments`, one per subject in the latest run,
-evaluated in this order:
+Returned by `GET /axes/:axis/assessments`, one per subject in the latest run.
+Each names the evidence ids it rests on (`supportingIds`, `conflictingIds`) and
+every source asked about the factor (`sources`). States are evaluated in this
+order:
 
 | State | Condition |
 |---|---|

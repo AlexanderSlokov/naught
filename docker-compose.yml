@@ -1,5 +1,6 @@
-# Three services, one volume. There is no migration step: the Parquet files
-# carry their own schema and the cache is rebuilt, never upgraded.
+# Three services, one volume. The cache is rebuilt, never upgraded. The lake is
+# migrated only at an upgrade stop (ADR 0005): when the API refuses to start and
+# names one, run `docker compose run --rm api node apps/api/dist/lake/migrate-lake.js`.
 services:
   api:
     build:

@@ -1,6 +1,7 @@
 import { Axis } from '@naught/shared';
 import { Explorer, type ExplorerProps } from '@/components/Explorer';
 import {
+  fetchAssessments,
   fetchAxes,
   fetchBlindSpots,
   fetchDelta,
@@ -34,20 +35,23 @@ export default async function Home(): Promise<React.ReactElement> {
 }
 
 async function load(): Promise<ExplorerProps> {
-  const [axes, projects, run, subjects, blindSpots, delta] = await Promise.all([
-    fetchAxes(),
-    fetchProjects(AXIS),
-    fetchLatestRun(AXIS),
-    fetchSubjects(AXIS),
-    fetchBlindSpots(AXIS),
-    fetchDelta(AXIS),
-  ]);
+  const [axes, projects, run, subjects, assessments, blindSpots, delta] =
+    await Promise.all([
+      fetchAxes(),
+      fetchProjects(AXIS),
+      fetchLatestRun(AXIS),
+      fetchSubjects(AXIS),
+      fetchAssessments(AXIS),
+      fetchBlindSpots(AXIS),
+      fetchDelta(AXIS),
+    ]);
   return {
     axis: AXIS,
     axes,
     project: projects[0] ?? null,
     run,
     subjects,
+    assessments,
     blindSpots,
     delta,
   };

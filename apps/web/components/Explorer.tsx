@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type {
+  AssessmentRow,
   Axis,
   AxisAvailability,
   BlindSpotRow,
@@ -16,6 +17,7 @@ import { DeltaStrip } from '@/components/DeltaStrip';
 import { Header } from '@/components/Header';
 import { SubjectPanel } from '@/components/SubjectPanel';
 import { SubjectTable } from '@/components/SubjectTable';
+import { assessmentIndex, subjectKey } from '@/lib/dossier';
 
 export interface ExplorerProps {
   axis: Axis;
@@ -23,6 +25,7 @@ export interface ExplorerProps {
   project: ProjectRef | null;
   run: LatestRun | null;
   subjects: SubjectRow[];
+  assessments: AssessmentRow[];
   blindSpots: BlindSpotRow[];
   delta: DeltaView;
 }
@@ -36,6 +39,15 @@ export function Explorer(props: ExplorerProps): React.ReactElement {
   const [selected, setSelected] = useState<string | null>(null);
   const subject =
     props.subjects.find((row) => row.subject === selected) ?? null;
+  const assessments = useMemo(
+    () => assessmentIndex(props.assessments),
+    [props.assessments],
+  );
+  const assessment =
+    subject === null
+      ? null
+      : (assessments.get(subjectKey(subject.subject, subject.container)) ??
+        null);
 
   return (
     <div className="naught-shell">
@@ -48,12 +60,17 @@ export function Explorer(props: ExplorerProps): React.ReactElement {
       <div className="naught-table">
         <SubjectTable
           subjects={props.subjects}
+          assessments={assessments}
           selected={selected}
           onSelect={setSelected}
         />
       </div>
       <aside className="naught-panel">
-        <SubjectPanel subject={subject} />
+        <SubjectPanel
+          axis={props.axis}
+          subject={subject}
+          assessment={assessment}
+        />
       </aside>
       <div className="naught-strip">
         <DeltaStrip delta={props.delta} />

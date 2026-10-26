@@ -1,5 +1,6 @@
-import type { SubjectRow } from '@naught/shared';
+import type { AssessmentRow, SubjectRow } from '@naught/shared';
 import { driftClass } from '@/components/drift';
+import { gradeOf, subjectKey } from '@/lib/dossier';
 
 /**
  * The object table: every subject the latest run saw, worst first.
@@ -10,10 +11,12 @@ import { driftClass } from '@/components/drift';
  */
 export function SubjectTable({
   subjects,
+  assessments,
   selected,
   onSelect,
 }: {
   subjects: SubjectRow[];
+  assessments: ReadonlyMap<string, AssessmentRow>;
   selected: string | null;
   onSelect: (subject: string) => void;
 }): React.ReactElement {
@@ -21,8 +24,9 @@ export function SubjectTable({
     <table>
       <thead>
         <tr>
-          <th style={{ width: '55%' }}>Subject</th>
+          <th style={{ width: '50%' }}>Subject</th>
           <th style={{ width: 70 }}>Drift</th>
+          <th style={{ width: 96 }}>Basis</th>
           <th>Observed</th>
         </tr>
       </thead>
@@ -35,6 +39,11 @@ export function SubjectTable({
           >
             <td className="naught-mono">{row.subject}</td>
             <td className={driftClass(row.drift)}>{row.drift ?? '—'}</td>
+            <Basis
+              assessment={assessments.get(
+                subjectKey(row.subject, row.container),
+              )}
+            />
             <td className="naught-mono bp6-text-muted">
               {row.observed ?? 'unknown'}
             </td>
@@ -43,4 +52,29 @@ export function SubjectTable({
       </tbody>
     </table>
   );
+}
+
+/**
+ * The grade, quiet when the answer is settled, and the state in its place
+ * when it is not — so a stale or contested row is visible without selecting it.
+ */
+function Basis({
+  assessment,
+}: {
+  assessment: AssessmentRow | undefined;
+}): React.ReactElement {
+  if (assessment === undefined) {
+    return <td className="naught-mono naught-basis--attention">unassessed</td>;
+  }
+  if (assessment.state !== 'established') {
+    return (
+      <td
+        className="naught-mono naught-basis--attention"
+        title={`grade ${gradeOf(assessment) ?? 'none'}`}
+      >
+        {assessment.state.replace('_', ' ')}
+      </td>
+    );
+  }
+  return <td className="naught-mono naught-basis">{gradeOf(assessment)}</td>;
 }
