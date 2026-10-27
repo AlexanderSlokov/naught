@@ -1,9 +1,3 @@
-# Naught — everything decays.
-#
-# One entry point for the things a person actually runs. Every target here is
-# read-only with respect to the systems Naught observes; the only thing any of
-# them writes is Naught's own data directory.
-
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
@@ -44,8 +38,6 @@ test: ## Run every workspace package's tests
 .PHONY: check
 check: typecheck test build audit ## Everything CI would run
 
-# --- the point --------------------------------------------------------------
-
 .PHONY: poc
 poc: ## Point Naught at Naught, twice, in a scratch lake that is thrown away
 	@dir=$$(mktemp -d -t naught-poc-XXXXXXXX); \
@@ -78,11 +70,9 @@ lake: ## Show what is in the lake right now
 		| sort -k2 || echo "lake is empty"
 
 .PHONY: burn
-burn: ## Delete the cache only. The lake is never touched.
+burn: ## Delete the cache only. The lake is kept.
 	rm -f "$(NAUGHT_DATA_DIR)/naught.duckdb" "$(NAUGHT_DATA_DIR)/naught.duckdb.wal"
 	@echo "cache gone. runs/ untouched — 'make rebuild-cache' restores everything."
-
-# --- running it -------------------------------------------------------------
 
 .PHONY: api
 api: ## Run the API alone (no queue, no UI)

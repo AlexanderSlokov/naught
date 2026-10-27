@@ -1,6 +1,5 @@
-# Three services, one volume. The cache is rebuilt, never upgraded. The lake is
-# migrated only at an upgrade stop (ADR 0005): when the API refuses to start and
-# names one, run `docker compose run --rm api node apps/api/dist/lake/migrate-lake.js`.
+# If the API fails to start due to a missing lake or database error,
+# run: `docker compose run --rm api node apps/api/dist/lake/migrate-lake.js`
 services:
   api:
     build:
@@ -11,9 +10,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       NAUGHT_API_PORT: "3001"
-      # The browser posts to /runs and opens the run socket from its own
-      # origin. Named, not '*': read-only outward describes the credentials
-      # Naught holds, not who may ask it to look.
+      # Allowed frontend origin for CORS and WebSocket connections.
+      # Set to an explicit origin instead of '*' so only your frontend can trigger runs.
       NAUGHT_WEB_ORIGIN: ${NAUGHT_WEB_ORIGIN:-http://localhost:3000}
     env_file:
       - path: .env
@@ -32,10 +30,9 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        # Where the *browser* reaches the API. `http://api:3001` below is the
-        # container network's name for it and resolves nowhere else, so the
-        # run button and its socket need this instead. Baked into the bundle
-        # during the build; changing it means rebuilding the web image.
+        # Public API URL used by the browser (client-side).
+        # The browser cannot access Docker's internal 'http://api:3001', so it needs
+        # an externally reachable URL. Baked in at build time; rebuild if changed.
         NEXT_PUBLIC_NAUGHT_API_URL: ${NEXT_PUBLIC_NAUGHT_API_URL:-http://localhost:3001}
     environment:
       NAUGHT_API_URL: http://api:3001
@@ -47,8 +44,8 @@ services:
 
   redis:
     image: redis:8-alpine
-    # The queue is scheduling state, not truth. If this volume is lost, the
-    # worst case is that a collection run happens again.
+    # Redis is only used as an in-memory job queue, not for persistent data.
+    # Persistence is disabled for speed; if lost, collection runs will simply re-run.
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -58,6 +55,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  # Back this up by copying it. `runs/` is the truth; `naught.duckdb` inside
-  # it is cache and is not worth the bytes.
+  # Persistent volume for application data (mounted at /var/lib/naught).
+  # To back up, copy this volume. The 'runs/' folder contains the actual data,
+  # while 'naught.duckdb' is just a cache that can be recreated.
   naught-data:
